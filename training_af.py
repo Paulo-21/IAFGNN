@@ -1,3 +1,4 @@
+import copy
 import os
 import sys
 import torch 
@@ -77,7 +78,6 @@ def reading_cnf(path):
     return args, att
     
 def read_apx(path):
-    #G = nx.Graph()
     i = 0
     map = {}
     att = []
@@ -86,57 +86,80 @@ def read_apx(path):
         if line[:3] == "arg":
             line = line[4:-3]
             map[line] = i
-            #G.add_node(i)
             i+=1
         elif line[:3] == "att":
             line = line[4:-3]
             s = line.split(",")
             att.append([map[s[0]], map[s[1]]])
-            #G.add_edge(map[s[0]], map[s[1]])
     arg = list([s for s in range(0, i)])
     return att, arg
 
+N = 500
+C, H, W = 3, 3, 3
+num_samples = N
+
+def get_item(af_name, af_dir, label_dir):
+    
+    af_path = os.path.join(af_dir,af_name)
+    label_path = os.path.join(label_dir,af_name)
+    tic = time.perf_counter()
+    att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path+".af")
+    if nb_el > 10000:
+        #print("pop")
+        return [[], [], [], nb_el]
+    toc = time.perf_counter()
+    #print(toc-tic , " seconds for RUST ")
+    target = transfom_to_graph(label_path, nb_el)
+       
+    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)))
+    #print("Graph build in ", toc-tic , " sec")
+    features_tensor = torch.Tensor(3)
+    if os.path.isfile("features_tensor/" + "" + af_name+".pt"):
+        features_tensor = torch.load("features_tensor/" + "" + af_name+".pt")
+        #print("loaded in ", toc-tic , " sec")
+    else:
+        nxg = nx.DiGraph()
+        nodes = list([s for s in range(0, item[4])])
+        att = list([([s, att2[i]]) for i, s in enumerate(att1)])
+        nxg.add_nodes_from(nodes)
+        nxg.add_edges_from(att)
+        #print("number of nodes : ", nxg.number_of_nodes())
+        #graph = dgl.from_networkx(nxg)
+        features  = calculate_node_features(nxg)
+        features_tensor = torch.tensor(np.array([features[node] for node in nxg.nodes()]), dtype=torch.float32)
+        torch.save(features_tensor, "features_tensor/" + "" + af_name+".pt")
+    
+    if graph.number_of_nodes() < nb_el:
+        graph.add_nodes(nb_el - graph.number_of_nodes())
+    
+    graph = dgl.add_self_loop(graph)
+    num_rows_to_overwrite = features_tensor.size(0)
+    num_columns_in_features = features_tensor.size(1)
+    inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32)
+    inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
+    inputs_to_overwrite.copy_(features_tensor)
+    return graph, inputs, target, nb_el
+
 class CustumGraphDataset(Dataset):
-    def __init__(self, af_dir, label_dir, use_cache = False):
-        self.graph = iter(os.listdir(label_dir))
+    def __init__(self, af_dir, label_dir):
+        self.graph = os.listdir(label_dir)
         self.af_dir = af_dir
         self.label_dir = label_dir
-        
+        self.cache_length = len(self.graph) # number of samples you want to cache
+        self.cache = [None]*len(self.graph)
     def __len__(self):
         return len(self.graph)
 
-    def __getitem__(self, idx):
-        af_name = next(self.graph)
-        af_path = os.path.join(self.af_dir,af_name)
-        label_path = os.path.join(self.label_dir,af_name)
-        tic = time.perf_counter()
-        #arg, att = af_reader_py.reading_apx(af_path)
-        #arg, att = af_reader_py.reading_cnf(af_path+".af")
-        att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path+".af")
-        """
-        arg , att = af_reader_py.reading_cnf(af_path+".af")
-        print(af_name)
-        
-        print(att1)
-        print(att2)
-        print("1_________")       
-        print(arg)
-        print(att)        
-        print("2----------")       
-
-        print("finish")
-        """
-        toc = time.perf_counter()
-        print(toc-tic , " seconds for RUST ")
-        #tic = time.perf_counter()
-        #arg, att = reading_cnf(af_path+".af")
-        #toc = time.perf_counter()
-        #print(toc-tic , " seconds PYTHON")
-        target = transfom_to_graph(label_path, nb_el)
-        #toc = time.perf_counter()
-        #print(toc-tic , " seconds PYTHON")
-        return att1, att2, target, af_name, nb_el
-    
+    def __getitem__(self, idx:int):
+        sys.stdout.flush()
+        if idx <= len(self.cache) :
+            if self.cache[idx] is None:
+                x = get_item(self.graph[idx], self.af_dir, self.label_dir)
+                self.cache[idx] = (copy.deepcopy(x))
+                return x
+        # hack to see if cache slot has changed since initialisation
+        x = self.cache[idx] # get float32 image tensor from cache
+        return x
 
 class GCN(nn.Module):
     def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
@@ -164,67 +187,33 @@ class GCN(nn.Module):
         h = self.fc(h)
         return h.squeeze()  # Remove the last dimension
 
-
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = GCN(128, 128, 128, 1).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
 loss = nn.BCELoss()
-sys.stdout.flush()
 model.train()
-
+af_dataset = CustumGraphDataset("../../../Documents/dataset_af/", "../../../Documents/result/")
 for epoch in range(200):
     tot_loss = []
-    af_dataset = CustumGraphDataset("../../../Documents/dataset_af/", "../../../Documents/result/")
     for i, item in enumerate(af_dataset):
-        """
-        nxg = nx.DiGraph()
-        nxg.add_nodes_from(item[1])
-        nxg.add_edges_from(item[0])
-        #print("number of nodes : ", nxg.number_of_nodes())
-        #graph = dgl.from_networkx(nxg)
-        """
-        if item[4] > 10000:
+        
+        if item[3] > 10000:
+            #print("plp")
             continue
         tic = time.perf_counter()
-        graph = dgl.graph((torch.tensor(item[0]),torch.tensor(item[1])))
-        #print("Graph build in ", toc-tic , " sec")
-        features_tensor = torch.Tensor(3)
-        if os.path.isfile("features_tensor/" + "" + item[3]+".pt"):
-            features_tensor = torch.load("features_tensor/" + "" + item[3]+".pt")
-            #print("loaded in ", toc-tic , " sec")
-        else:
-            nxg = nx.DiGraph()
-            nodes = list([s for s in range(0, item[4])])
-            att = list([([s, item[1][i]]) for i, s in enumerate(item[0])])
-            nxg.add_nodes_from(nodes)
-            nxg.add_edges_from(att)
-            #print("number of nodes : ", nxg.number_of_nodes())
-            #graph = dgl.from_networkx(nxg)
-            features  = calculate_node_features(nxg)
-            features_tensor = torch.tensor(np.array([features[node] for node in nxg.nodes()]), dtype=torch.float32)
-            torch.save(features_tensor, "features_tensor/" + "" + item[3]+".pt")
-        
-        if graph.number_of_nodes() < item[4]:
-            graph.add_nodes(item[4] - graph.number_of_nodes())
-        graph = dgl.add_self_loop(graph)
-        num_rows_to_overwrite = features_tensor.size(0)
-        num_columns_in_features = features_tensor.size(1)
-        inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32)
-        inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
-        inputs_to_overwrite.copy_(features_tensor)
-        toc = time.perf_counter()
-        print("Finished in ", toc-tic , " sec")
+        graph = item[0]
+        inputs = item[1]
         optimizer.zero_grad()
         out = model(graph, inputs)
         predicted = (torch.sigmoid(out.squeeze())).float()
-        
         losse = loss(predicted, item[2])
         losse.backward()
         optimizer.step()
+        toc = time.perf_counter()
         tot_loss.append(losse.item())
-
-        print("Epoch : ", epoch, " iter : ", i, losse.item())
-        #if i % 100 == 99:
-    
+        if i % 100 == 99:
+            print("Finished in ", toc-tic , " sec")
+            print("Epoch : ", epoch, " iter : ", i, losse.item())
+                
     print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss))
 
