@@ -1,6 +1,6 @@
 import torch
 import warnings
-
+"""
 gpu_ok = False
 if torch.cuda.is_available():
     device_cap = torch.cuda.get_device_capability()
@@ -104,3 +104,8 @@ speedup = eager_med / compile_med
 assert(speedup > 1)
 print(f"(eval) eager median: {eager_med}, compile median: {compile_med}, speedup: {speedup}x")
 print("~" * 10)
+"""
+
+
+for i in range(14, 15):
+    print(i)
