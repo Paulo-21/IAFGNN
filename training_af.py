@@ -25,7 +25,7 @@ def graph_coloring(nx_G):
     coloring = nx.algorithms.coloring.greedy_color(nx_G, strategy='largest_first')
     return coloring
 
-def calculate_node_features(nx_G):
+def calculate_node_features(nx_G, hcat, card, noselfatt, maxb, gr):
     coloring = graph_coloring(nx_G)
     page_rank = nx.pagerank(nx_G)
     closeness_centrality = nx.degree_centrality(nx_G)
@@ -36,12 +36,18 @@ def calculate_node_features(nx_G):
     raw_features = {}
     for node in nx_G.nodes():
         raw_features[node] = [
+            
             coloring[node],
             page_rank[node],
             closeness_centrality[node],
             eigenvector_centrality[node],
             in_degrees[node],
             out_degrees[node],
+            hcat[node], 
+            card[node], 
+            noselfatt[node], 
+            maxb[node],
+            gr[node]
         ]
 
     # Normalize the features
@@ -53,7 +59,6 @@ def calculate_node_features(nx_G):
     normalized_features = {node: feature_matrix[i] for i, node in enumerate(nodes)}
 
     return normalized_features
-
 
 def transfom_to_graph(label_path, n):
     f = open(label_path, 'r')
@@ -105,14 +110,15 @@ def get_item(af_name, af_dir, label_dir):
     label_path = os.path.join(label_dir,af_name)
     tic = time.perf_counter()
     #att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path+".af")
-    att1, att2, nb_el, hcat, card, noselfatt, maxb = af_reader_py.reading_cnf_for_dgl_with_semantics(af_path+".af")
+    att1, att2, nb_el, hcat, card, noselfatt, maxb, gr = af_reader_py.reading_cnf_for_dgl_with_semantics(af_path+".af")
     if nb_el > 10000:
         #print("pop")
         return [[], [], [], nb_el]
+    
     toc = time.perf_counter()
     #print(toc-tic , " seconds for RUST ")
     target = transfom_to_graph(label_path, nb_el)
-       
+    
     graph = dgl.graph((torch.tensor(att1),torch.tensor(att2))).to(device)
     #print("Graph build in ", toc-tic , " sec")
     features_tensor = torch.Tensor(3).to(device)
@@ -121,13 +127,11 @@ def get_item(af_name, af_dir, label_dir):
         #print("loaded in ", toc-tic , " sec")
     else:
         nxg = nx.DiGraph()
-        nodes = list([s for s in range(0, item[4])])
+        nodes = list([s for s in range(0, nb_el)])
         att = list([([s, att2[i]]) for i, s in enumerate(att1)])
         nxg.add_nodes_from(nodes)
         nxg.add_edges_from(att)
-        #print("number of nodes : ", nxg.number_of_nodes())
-        #graph = dgl.from_networkx(nxg)
-        features  = calculate_node_features(nxg)
+        features  = calculate_node_features(nxg, hcat, card, noselfatt, maxb, gr)
         features_tensor = torch.tensor(np.array([features[node] for node in nxg.nodes()]), dtype=torch.float32).to(device)
         torch.save(features_tensor, af_data_root+"features_tensor/" + "" + af_name+".pt")
     

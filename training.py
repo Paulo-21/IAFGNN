@@ -12,7 +12,7 @@ for _ in range(200):
     res = f(x, y)
     res.backward()
     with torch.no_grad():
-        x -= lr*x.grad
+        x -= lr*x.grad  
         y -= lr*y.grad
     x.grad.zero_()
     y.grad.zero_()
