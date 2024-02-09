@@ -103,7 +103,8 @@ def get_item(af_name, af_dir, label_dir):
     af_path = os.path.join(af_dir,af_name)
     label_path = os.path.join(label_dir,af_name)
     tic = time.perf_counter()
-    att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path+".af")
+    #att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path+".af")
+    att1, att2, nb_el, hcat, card, noselfatt, maxb = af_reader_py.reading_cnf_for_dgl_with_semantics(af_path+".af")
     if nb_el > 10000:
         #print("pop")
         return [[], [], [], nb_el]
