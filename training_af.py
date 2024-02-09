@@ -5,6 +5,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset
+from torch.utils.data import DataLoader
 import ctypes
 import multiprocessing as mp
 import numpy as np
@@ -19,7 +20,7 @@ from torch_geometric.utils import *
 import dgl
 from sklearn.preprocessing import StandardScaler
 from dgl.nn import GraphConv
-
+af_data_root = "../af_data/"
 def graph_coloring(nx_G):
     coloring = nx.algorithms.coloring.greedy_color(nx_G, strategy='largest_first')
     return coloring
@@ -62,7 +63,7 @@ def transfom_to_graph(label_path, n):
         if n == '':
             continue
         target[int(n)] = 1.0
-    return torch.tensor(target)
+    return torch.tensor(target).to(device)
 
 
 def reading_cnf(path):
@@ -111,11 +112,11 @@ def get_item(af_name, af_dir, label_dir):
     #print(toc-tic , " seconds for RUST ")
     target = transfom_to_graph(label_path, nb_el)
        
-    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)))
+    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2))).to(device)
     #print("Graph build in ", toc-tic , " sec")
-    features_tensor = torch.Tensor(3)
-    if os.path.isfile("features_tensor/" + "" + af_name+".pt"):
-        features_tensor = torch.load("features_tensor/" + "" + af_name+".pt")
+    features_tensor = torch.Tensor(3).to(device)
+    if os.path.isfile(af_data_root+"features_tensor/" + "" + af_name+".pt"):
+        features_tensor = torch.load(af_data_root+"features_tensor/" + "" + af_name+".pt").to(device)
         #print("loaded in ", toc-tic , " sec")
     else:
         nxg = nx.DiGraph()
@@ -126,8 +127,8 @@ def get_item(af_name, af_dir, label_dir):
         #print("number of nodes : ", nxg.number_of_nodes())
         #graph = dgl.from_networkx(nxg)
         features  = calculate_node_features(nxg)
-        features_tensor = torch.tensor(np.array([features[node] for node in nxg.nodes()]), dtype=torch.float32)
-        torch.save(features_tensor, "features_tensor/" + "" + af_name+".pt")
+        features_tensor = torch.tensor(np.array([features[node] for node in nxg.nodes()]), dtype=torch.float32).to(device)
+        torch.save(features_tensor, af_data_root+"features_tensor/" + "" + af_name+".pt")
     
     if graph.number_of_nodes() < nb_el:
         graph.add_nodes(nb_el - graph.number_of_nodes())
@@ -135,7 +136,7 @@ def get_item(af_name, af_dir, label_dir):
     graph = dgl.add_self_loop(graph)
     num_rows_to_overwrite = features_tensor.size(0)
     num_columns_in_features = features_tensor.size(1)
-    inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32)
+    inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32).to(device)
     inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
     inputs_to_overwrite.copy_(features_tensor)
     return graph, inputs, target, nb_el
@@ -151,7 +152,7 @@ class CustumGraphDataset(Dataset):
         return len(self.graph)
 
     def __getitem__(self, idx:int):
-        sys.stdout.flush()
+        #sys.stdout.flush()
         if idx <= len(self.cache) :
             if self.cache[idx] is None:
                 x = get_item(self.graph[idx], self.af_dir, self.label_dir)
@@ -167,7 +168,8 @@ class GCN(nn.Module):
         self.layer1 = GraphConv(in_features, hidden_features)
         self.layer2 = GraphConv(hidden_features, hidden_features)
         self.layer3 = GraphConv(hidden_features, hidden_features)
-        self.layer4 = GraphConv(hidden_features, fc_features)
+        self.layer4 = GraphConv(hidden_features, hidden_features)
+        self.layer5 = GraphConv(hidden_features, fc_features)
         self.fc = nn.Linear(fc_features, num_classes)
         self.dropout = nn.Dropout(dropout)
 
@@ -184,23 +186,28 @@ class GCN(nn.Module):
         h = self.layer4(g, h + inputs)
         h = F.relu(h)
         h = self.dropout(h)
+        h = self.layer5(g, h + inputs)
+        h = F.relu(h)
+        h = self.dropout(h)
         h = self.fc(h)
         return h.squeeze()  # Remove the last dimension
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(device)
 model = GCN(128, 128, 128, 1).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
 loss = nn.BCELoss()
 model.train()
-af_dataset = CustumGraphDataset("../../../Documents/dataset_af/", "../../../Documents/result/")
+af_dataset = CustumGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
+#train_dataloader = DataLoader(af_dataset, batch_size=64)
 for epoch in range(200):
-    tot_loss = []
+    tot_loss = [0]*len(af_dataset)
     for i, item in enumerate(af_dataset):
         
         if item[3] > 10000:
             #print("plp")
             continue
-        tic = time.perf_counter()
+        #tic = time.perf_counter()
         graph = item[0]
         inputs = item[1]
         optimizer.zero_grad()
@@ -209,10 +216,10 @@ for epoch in range(200):
         losse = loss(predicted, item[2])
         losse.backward()
         optimizer.step()
-        toc = time.perf_counter()
-        tot_loss.append(losse.item())
-        if i % 100 == 99:
-            print("Finished in ", toc-tic , " sec")
+        #toc = time.perf_counter()
+        tot_loss[i] = losse.item()
+        if i % 50 == 49:
+            #print("Finished in ", toc-tic , " sec")
             print("Epoch : ", epoch, " iter : ", i, losse.item())
                 
     print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss))
