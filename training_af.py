@@ -13,6 +13,8 @@ import networkx as nx
 import time
 import af_reader_py
 import statistics
+import platform
+
 """
 from torch_geometric.nn import GCNConv, GraphConv
 from torch_geometric.utils import *
@@ -100,10 +102,6 @@ def read_apx(path):
     arg = list([s for s in range(0, i)])
     return att, arg
 
-N = 500
-C, H, W = 3, 3, 3
-num_samples = N
-
 def get_item(af_name, af_dir, label_dir):
     
     af_path = os.path.join(af_dir,af_name)
@@ -157,7 +155,6 @@ class CustumGraphDataset(Dataset):
         return len(self.graph)
 
     def __getitem__(self, idx:int):
-        #sys.stdout.flush()
         if idx <= len(self.cache) :
             if self.cache[idx] is None:
                 x = get_item(self.graph[idx], self.af_dir, self.label_dir)
@@ -200,13 +197,17 @@ class GCN(nn.Module):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(device)
 model = GCN(128, 128, 128, 1).to(device)
+if platform.system() == "Linux":
+    model = torch.compile(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
 loss = nn.BCELoss()
 model.train()
 af_dataset = CustumGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
+
 #train_dataloader = DataLoader(af_dataset, batch_size=64)
 for epoch in range(200):
     tot_loss = [0]*len(af_dataset)
+    tot_loss_v = 0
     for i, item in enumerate(af_dataset):
         
         if item[3] > 10000:
@@ -223,9 +224,10 @@ for epoch in range(200):
         optimizer.step()
         #toc = time.perf_counter()
         tot_loss[i] = losse.item()
+        tot_loss_v += losse.item()
         if i % 50 == 49:
             #print("Finished in ", toc-tic , " sec")
             print("Epoch : ", epoch, " iter : ", i, losse.item())
                 
-    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss))
+    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), " ", tot_loss_v )
 
