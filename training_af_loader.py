@@ -162,12 +162,9 @@ class CustumGraphDataset(DGLDataset):
                 graph.ndata["feat"] = features
                 graph.ndata["label"] = label
                 self.graphs.append(graph)
-                #self.labels.append(label)
-                print(graph.number_of_nodes(), " ", len(label))
 
     def __getitem__(self, idx:int):
-        #print(self.graphs[idx].number_of_nodes(), " ", len(self.labels[idx]))
-        return self.graphs[idx]#, self.labels[idx]
+        return self.graphs[idx]
 
 class GCN(nn.Module):
     def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
@@ -200,16 +197,18 @@ class GCN(nn.Module):
         return h.squeeze()  # Remove the last dimension
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(device)
+print("runtime : ", device)
 model = GCN(128, 128, 128, 1).to(device)
-if platform.system() == "Linux":
+if platform.system() == "Linux" and torch.cuda.is_available():
     model = torch.compile(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
 loss = nn.BCELoss()
 model.train()
+print("Loading Data...")
 af_dataset = CustumGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
 data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=True)
 #train_dataloader = DataLoader(af_dataset, batch_size=64)
+print("Start training")
 for epoch in range(200):
     tot_loss = []
     tot_loss_v = 0
