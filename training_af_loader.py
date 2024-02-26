@@ -4,8 +4,9 @@ import sys
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
+from dgl.data import DGLDataset
+#from torch.utils.data import Dataset
+#from torch.utils.data import DataLoader
 import ctypes
 import multiprocessing as mp
 import numpy as np
@@ -143,25 +144,30 @@ def get_item(af_name, af_dir, label_dir):
     inputs_to_overwrite.copy_(features_tensor)
     return graph, inputs, target, nb_el
 
-class CustumGraphDataset(Dataset):
+class CustumGraphDataset(DGLDataset):
     def __init__(self, af_dir, label_dir):
-        self.graph = os.listdir(label_dir)
-        self.af_dir = af_dir
+        super().__init__(name="Af dataset")
         self.label_dir = label_dir
-        self.cache_length = len(self.graph) # number of samples you want to cache
-        self.cache = [None]*len(self.graph)
+        self.af_dir = af_dir
     def __len__(self):
-        return len(self.graph)
+        return len(self.graphs)
+    def process(self):
+        self.af_dir = af_data_root+"dataset_af/"
+        self.label_dir = af_data_root+"result/"
+        self.graphs = []
+        self.labels = []
+        for file in os.listdir(self.label_dir):
+            graph, features, label, nb_el = get_item(file, self.af_dir, self.label_dir)
+            if nb_el < 10000:
+                graph.ndata["feat"] = features
+                graph.ndata["label"] = label
+                self.graphs.append(graph)
+                #self.labels.append(label)
+                print(graph.number_of_nodes(), " ", len(label))
 
     def __getitem__(self, idx:int):
-        if idx <= len(self.cache) :
-            if self.cache[idx] is None:
-                x = get_item(self.graph[idx], self.af_dir, self.label_dir)
-                self.cache[idx] = (copy.deepcopy(x))
-                return x
-        # hack to see if cache slot has changed since initialisation
-        x = self.cache[idx] # get float32 image tensor from cache
-        return x
+        #print(self.graphs[idx].number_of_nodes(), " ", len(self.labels[idx]))
+        return self.graphs[idx]#, self.labels[idx]
 
 class GCN(nn.Module):
     def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
@@ -202,61 +208,26 @@ optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
 loss = nn.BCELoss()
 model.train()
 af_dataset = CustumGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
-
+data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=True)
 #train_dataloader = DataLoader(af_dataset, batch_size=64)
 for epoch in range(200):
-    tot_loss = [0]*len(af_dataset)
+    tot_loss = []
     tot_loss_v = 0
     model.train()
-    for i, item in enumerate(af_dataset):
-        
-        if item[3] > 10000:
-            #print("plp")
-            continue
-        #tic = time.perf_counter()
-        graph = item[0]
-        inputs = item[1]
+    i = 0
+    for graph in data_loader:
+        inputs = graph.ndata["feat"]
+        label = graph.ndata["label"]
         optimizer.zero_grad()
         out = model(graph, inputs)
         predicted = (torch.sigmoid(out.squeeze())).float()
-        losse = loss(predicted, item[2])
+        losse = loss(predicted, label)
         losse.backward()
         optimizer.step()
-        #toc = time.perf_counter()
-        tot_loss[i] = losse.item()
+        i+=1
+        tot_loss.append(losse.item())
         tot_loss_v += losse.item()
-        if i % 50 == 49:
-            #print("Finished in ", toc-tic , " sec")
-            print("Epoch : ", epoch, " iter : ", i, losse.item())
-    acc = 0
+    
     tot_nb_el = 0
-    #model.eval()
-    for i, item in enumerate(af_dataset):
-        with torch.no_grad():
-            if item[3] > 10000:
-                #print("plp")
-                continue
-            #tic = time.perf_counter()
-            graph = item[0]
-            inputs = item[1]
-            #optimizer.zero_grad()
-            out = model(graph, inputs)
-
-            predicted = (torch.sigmoid(out.squeeze())).float()
-            print("PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP")
-            print(predicted)
-            print("-------------------------------------------------------")
-            print(item[2])
-            losse = loss(predicted, item[2])
-            ac = sum(element1 > 0.9 and element2 == 1  for element1, element2 in zip(predicted, item[2]))
-            #losse.backward()
-            #optimizer.step()
-            #toc = time.perf_counter()
-            tot_nb_el+=len(item[2])
-            acc += ac
-            if i % 50 == 49:
-                #print("Finished in ", toc-tic , " sec")
-                print("Epoch : ", epoch, " iter : ", i, losse.item())
-    #print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), " ", tot_loss_v )
-    print("Accuracy : ", acc.item()/tot_nb_el, " %")
-    model.train()        
+    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), " ", tot_loss_v )
+           

@@ -14,14 +14,12 @@ import time
 import af_reader_py
 import statistics
 import platform
-
-"""
 from torch_geometric.nn import GCNConv, GraphConv
 from torch_geometric.utils import *
-"""
-import dgl
+
+#import dgl
 from sklearn.preprocessing import StandardScaler
-from dgl.nn import GraphConv
+#from dgl.nn import GraphConv
 af_data_root = "../af_data/"
 def graph_coloring(nx_G):
     coloring = nx.algorithms.coloring.greedy_color(nx_G, strategy='largest_first')
@@ -38,6 +36,7 @@ def calculate_node_features(nx_G, hcat, card, noselfatt, maxb, gr):
     raw_features = {}
     for node in nx_G.nodes():
         raw_features[node] = [
+            
             coloring[node],
             page_rank[node],
             closeness_centrality[node],
@@ -69,7 +68,7 @@ def transfom_to_graph(label_path, n):
         if n == '':
             continue
         target[int(n)] = 1.0
-    return torch.tensor(target, requires_grad=False).to(device)
+    return torch.tensor(target).to(device)
 
 
 def reading_cnf(path):
@@ -116,7 +115,7 @@ def get_item(af_name, af_dir, label_dir):
     #print(toc-tic , " seconds for RUST ")
     target = transfom_to_graph(label_path, nb_el)
     
-    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), device=device)#.to(device)
+    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2))).to(device)
     #print("Graph build in ", toc-tic , " sec")
     features_tensor = torch.Tensor(3).to(device)
     if os.path.isfile(af_data_root+"features_tensor/" + "" + af_name+".pt"):
@@ -138,7 +137,7 @@ def get_item(af_name, af_dir, label_dir):
     graph = dgl.add_self_loop(graph)
     num_rows_to_overwrite = features_tensor.size(0)
     num_columns_in_features = features_tensor.size(1)
-    inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32, requires_grad=False).to(device)
+    inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32).to(device)
     inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
     inputs_to_overwrite.copy_(features_tensor)
     return graph, inputs, target, nb_el
@@ -170,7 +169,7 @@ class GCN(nn.Module):
         self.layer2 = GraphConv(hidden_features, hidden_features)
         self.layer3 = GraphConv(hidden_features, hidden_features)
         self.layer4 = GraphConv(hidden_features, hidden_features)
-        #self.layer5 = GraphConv(hidden_features, fc_features)
+        self.layer5 = GraphConv(hidden_features, fc_features)
         self.fc = nn.Linear(fc_features, num_classes)
         self.dropout = nn.Dropout(dropout)
 
@@ -187,9 +186,9 @@ class GCN(nn.Module):
         h = self.layer4(g, h + inputs)
         h = F.relu(h)
         h = self.dropout(h)
-        #h = self.layer5(g, h + inputs)
-        #h = F.relu(h)
-        #h = self.dropout(h)
+        h = self.layer5(g, h + inputs)
+        h = F.relu(h)
+        h = self.dropout(h)
         h = self.fc(h)
         return h.squeeze()  # Remove the last dimension
 
@@ -207,7 +206,6 @@ af_dataset = CustumGraphDataset(af_data_root+"dataset_af/", af_data_root+"result
 for epoch in range(200):
     tot_loss = [0]*len(af_dataset)
     tot_loss_v = 0
-    model.train()
     for i, item in enumerate(af_dataset):
         
         if item[3] > 10000:
@@ -228,35 +226,6 @@ for epoch in range(200):
         if i % 50 == 49:
             #print("Finished in ", toc-tic , " sec")
             print("Epoch : ", epoch, " iter : ", i, losse.item())
-    acc = 0
-    tot_nb_el = 0
-    #model.eval()
-    for i, item in enumerate(af_dataset):
-        with torch.no_grad():
-            if item[3] > 10000:
-                #print("plp")
-                continue
-            #tic = time.perf_counter()
-            graph = item[0]
-            inputs = item[1]
-            #optimizer.zero_grad()
-            out = model(graph, inputs)
+                
+    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), " ", tot_loss_v )
 
-            predicted = (torch.sigmoid(out.squeeze())).float()
-            print("PPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPPP")
-            print(predicted)
-            print("-------------------------------------------------------")
-            print(item[2])
-            losse = loss(predicted, item[2])
-            ac = sum(element1 > 0.9 and element2 == 1  for element1, element2 in zip(predicted, item[2]))
-            #losse.backward()
-            #optimizer.step()
-            #toc = time.perf_counter()
-            tot_nb_el+=len(item[2])
-            acc += ac
-            if i % 50 == 49:
-                #print("Finished in ", toc-tic , " sec")
-                print("Epoch : ", epoch, " iter : ", i, losse.item())
-    #print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), " ", tot_loss_v )
-    print("Accuracy : ", acc.item()/tot_nb_el, " %")
-    model.train()        
