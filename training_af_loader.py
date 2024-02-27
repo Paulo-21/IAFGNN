@@ -207,13 +207,13 @@ model.train()
 print("Loading Data...")
 af_dataset = CustumGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
 data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=True)
+test_data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=False)
 #train_dataloader = DataLoader(af_dataset, batch_size=64)
 print("Start training")
 for epoch in range(200):
     tot_loss = []
     tot_loss_v = 0
     model.train()
-    i = 0
     for graph in data_loader:
         inputs = graph.ndata["feat"]
         label = graph.ndata["label"]
@@ -223,10 +223,25 @@ for epoch in range(200):
         losse = loss(predicted, label)
         losse.backward()
         optimizer.step()
-        i+=1
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
+    model.eval()
+    tot_el_yes = 0
+    tot_el_no = 0
+    acc_yes = 0
+    acc_no = 0
+
+    with torch.no_grad():
+        for graph in test_data_loader:
+            inputs = graph.ndata["feat"]
+            label = graph.ndata["label"]
+            out = model(graph, inputs)
+            predicted = (torch.sigmoid(out.squeeze())>0.9).float()
+            acc_yes += sum(element1 == element2 == 1.0  for element1, element2 in zip(predicted, label)).item()
+            acc_no += sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
+            tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
+            tot_el_no += sum(element1 == 0.0   for element1 in label).item()
+            
     
-    tot_nb_el = 0
-    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), " ", tot_loss_v )
-           
+    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
+    print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
