@@ -225,6 +225,9 @@ for epoch in range(200):
         optimizer.step()
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
+    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
+    #print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
+"""
     model.eval()
     tot_el_yes = 0
     tot_el_no = 0
@@ -241,9 +244,8 @@ for epoch in range(200):
             acc_no += sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
             tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
             tot_el_no += sum(element1 == 0.0   for element1 in label).item()
-
-    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
-    print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
+"""
+    
 print("final test")
 
 model.eval()
