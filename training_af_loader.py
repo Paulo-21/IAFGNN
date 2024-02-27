@@ -241,7 +241,25 @@ for epoch in range(200):
             acc_no += sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
             tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
             tot_el_no += sum(element1 == 0.0   for element1 in label).item()
-            
-    
+
     print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
     print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
+print("final test")
+
+model.eval()
+acc_yes = 0
+acc_no = 0
+tot_el_yes = 0
+tot_el_no = 0
+with torch.no_grad():
+    for graph in af_dataset:
+        inputs = graph.ndata["feat"]
+        label = graph.ndata["label"]
+        out = model(graph, inputs)
+        predicted = (torch.sigmoid(out.squeeze())>0.9).float()
+        acc_yes += sum(element1 == element2 == 1.0  for element1, element2 in zip(predicted, label)).item()
+        acc_no += sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
+        tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
+        tot_el_no += sum(element1 == 0.0   for element1 in label).item()
+
+print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
