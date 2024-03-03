@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import networkx as nx
 import numpy as np
 import argparse
+
 from dgl.nn import GraphConv
 #from torch_geometric.utils.convert import from_networkx
 #from torch_geometric.utils import add_self_loops
@@ -189,20 +190,17 @@ def main(cmd_args):
             thresholds = load_thresholds(threshold_path)
             threshold = thresholds[cmd_args.task]
             
-            if threshold == 1:
-                print("NO")
-                return
-
+            #if threshold == 1:
+                #print("NO")
+                #return
             inputs = torch.randn(graph.number_of_nodes(), cmd_args.in_features , dtype=torch.float)
-            print(inputs)
+            
             sys.stdout.flush() 
             net = AFGCNModel(cmd_args.in_features, 128, 128, 1)
             checkpoint_path = os.path.join(__location__, cmd_args.task + ".pth")
             load_checkpoint(net, checkpoint_path)
-            
-            
+
             features  = calculate_node_features(nxg)
-            print(features)
             sys.stdout.flush()
             features_tensor = torch.tensor(np.array([features[node] for node in nxg.nodes()]), dtype=torch.float)
             num_rows_to_overwrite = features_tensor.size(0)
@@ -211,7 +209,7 @@ def main(cmd_args):
             inputs_to_overwrite.copy_(features_tensor)
             
             outputs = net(graph, inputs)
-            print("Outputs")
+            
             #print(outputs)
             predicted = (torch.sigmoid(outputs.squeeze()) > threshold).float()
             #print(predicted)

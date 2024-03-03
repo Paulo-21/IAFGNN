@@ -32,7 +32,7 @@ def calculate_node_features(nx_G, hcat, card, noselfatt, maxb, gr):
     coloring = graph_coloring(nx_G)
     page_rank = nx.pagerank(nx_G)
     closeness_centrality = nx.degree_centrality(nx_G)
-    eigenvector_centrality = nx.eigenvector_centrality(nx_G, max_iter=10000)
+    eigenvector_centrality = nx.eigenvector_centrality_numpy(nx_G, max_iter=10000)
     in_degrees = nx_G.in_degree()
     out_degrees = nx_G.out_degree()
 
@@ -46,8 +46,8 @@ def calculate_node_features(nx_G, hcat, card, noselfatt, maxb, gr):
             in_degrees[node],
             out_degrees[node],
             hcat[node], 
-            card[node], 
-            noselfatt[node], 
+            card[node],
+            noselfatt[node],
             maxb[node],
             gr[node]
         ]
@@ -108,8 +108,8 @@ def get_item(af_name, af_dir, label_dir):
     label_path = os.path.join(label_dir,af_name)
     tic = time.perf_counter()
     #att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path+".af")
-    att1, att2, nb_el, hcat, card, noselfatt, maxb, gr = af_reader_py.reading_cnf_for_dgl_with_semantics(af_path+".af")
-    if nb_el > 10000:
+    att1, att2, nb_el, hcat, card, noselfatt, maxb, gr = af_reader_py.reading_cnf_for_dgl_with_semantics(af_path)
+    if nb_el > 25000:
         #print("pop")
         return [[], [], [], nb_el]
     
@@ -158,7 +158,7 @@ class CustumGraphDataset(DGLDataset):
         self.labels = []
         for file in os.listdir(self.label_dir):
             graph, features, label, nb_el = get_item(file, self.af_dir, self.label_dir)
-            if nb_el < 10000:
+            if nb_el < 25000:
                 graph.ndata["feat"] = features
                 graph.ndata["label"] = label
                 self.graphs.append(graph)
@@ -245,7 +245,6 @@ for epoch in range(200):
             tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
             tot_el_no += sum(element1 == 0.0   for element1 in label).item()
 """
-    
 print("final test")
 
 model.eval()
