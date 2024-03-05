@@ -46,3 +46,9 @@ for file in os.listdir(dir):
         tot_t2+=max_time*2
     """
     print(t1, " ", t2)
+
+print("---------------------------------------------------")
+print("Result Finale : Paul vs Lars")
+print("NB Error   : ", n_error1, " | ", n_error2)
+print("NB Timeout : ", n_timeout1, " | ", n_timeout2)
+print("Tot time   : ", tot_t1, " | ", tot_t2)
