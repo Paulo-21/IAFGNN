@@ -8,7 +8,7 @@ from dgl.data import DGLDataset
 #from torch.utils.data import Dataset
 #from torch.utils.data import DataLoader
 import ctypes
-
+import gc
 import multiprocessing as mp
 import numpy as np
 import rustworkx as rx
@@ -66,15 +66,16 @@ def calculate_node_features(nx_G, hcat, card, noselfatt, maxb, gr, eigenvector_c
     normalized_features = {node: feature_matrix[i] for i, node in enumerate(nodes)}
 
     return normalized_features
-def standard_feature(raw_features,  nx_G):
+"""
+def standard_feature(raw_features):
     scaler = StandardScaler()
     #nodes = list(nx_G.nodes())
     #feature_matrix = scaler.fit_transform([raw_features[i] for i, node in enumerate(nodes)])
-    feature_matrix = scaler.fit_transform(raw_features)
+    
     # Create the normalized features dictionary
     #normalized_features = {node: feature_matrix[i] for i, node in enumerate(nodes)}
     return feature_matrix
-
+"""
 def transfom_to_graph(label_path, n):
     f = open(label_path, 'r')
     data = f.read()
@@ -92,28 +93,40 @@ def get_item(af_path):
     att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path)
     toc = time.perf_counter()
     print(toc-tic , " seconds for RUST ")
+    tic = time.perf_counter()
+    tic3 = time.perf_counter()
     graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), device=device)#.to(device)
+    print("dgl ",time.perf_counter()-tic)
+    """
+    tic = time.perf_counter()
     nxg = nx.DiGraph()
     nodes = list([s for s in range(0, nb_el)])
     att = list([(s, att2[i]) for i, s in enumerate(att1)])
+    print("list ", time.perf_counter()-tic)
+    tic = time.perf_counter()
     nxg.add_nodes_from(nodes)
     nxg.add_edges_from(att)
+    print("add ", time.perf_counter()-tic)
     tic = time.perf_counter()
-    tic3 = time.perf_counter()
     #page_rank = list(nx.pagerank(nxg).values())
     degree_centrality = list(nx.degree_centrality(nxg).values())
     in_degrees = list( s for (i, s) in nxg.in_degree())
     out_degrees = list( s for (i, s) in nxg.out_degree())
-    print("LIST", time.perf_counter()-tic3)
-    #out_degrees = nxg.out_degree()
-    fn = [[0,0,0,0,0]]*nxg.number_of_nodes()
+    all = list( s+i for (i, s) in zip(out_degrees, in_degrees))
+    m = max(all)
+
+    print(degree_centrality[0]," ",  in_degrees[0]," ",  out_degrees[0], " ", (in_degrees[0]+out_degrees[0])/(nxg.number_of_nodes()-1))
+    print("ALL PRE", time.perf_counter()-tic3)
+    """
     tic = time.perf_counter()
-    raw_features = af_reader_py.compute_features(af_path, degree_centrality, in_degrees, out_degrees, 10000, 0.00001 )
+    raw_features = af_reader_py.compute_features(af_path, 10000, 0.00001 )
     print("Python wrappe the function : ", time.perf_counter()-tic, " sec")
 
-
     #features  = calculate_node_features(nxg, hcat, card, noselfatt, maxb, gr, eig)
-    features = standard_feature(raw_features, nxg)
+    tic = time.perf_counter()
+    scaler = StandardScaler()
+    features = scaler.fit_transform(raw_features)
+    print("standscal : ", time.perf_counter()-tic)
     #features_tensor = torch.tensor(np.array([features[node] for node in nxg.nodes()]), dtype=torch.float32).to(device)
     tic = time.perf_counter()
     features_tensor = torch.tensor(features, dtype=torch.float32).to(device)
@@ -128,6 +141,7 @@ def get_item(af_path):
     inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
     inputs_to_overwrite.copy_(features_tensor)
     print("end ", time.perf_counter()-tic)
+    
     return graph, inputs
 
 class GCN(nn.Module):
