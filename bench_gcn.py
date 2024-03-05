@@ -17,7 +17,7 @@ for file in os.listdir(dir):
     print(file)
     try:
         tic = time.perf_counter()
-        code = subprocess.call(["py", "afgcnv3_rx.py", path], timeout=max_time)
+        code = subprocess.call(["python", "afgcnv3_rx.py", path], timeout=max_time)
         toc = time.perf_counter()
         t1 = toc - tic
         tot_t1+=t1
@@ -32,7 +32,7 @@ for file in os.listdir(dir):
     """
     try:
         tic2 = time.perf_counter()
-        code1 = subprocess.call(["py", "solver_ag.py", "--filepath", path, "--task", "DC-CO", "--argument", "1"], timeout=max_time)
+        code1 = subprocess.call(["python", "solver_ag.py", "--filepath", path, "--task", "DC-CO", "--argument", "1"], timeout=max_time)
         toc2 = time.perf_counter()
         t2 = toc2 - tic2
         tot_t2+=max_time*2
