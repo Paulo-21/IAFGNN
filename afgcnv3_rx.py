@@ -1,81 +1,15 @@
-import copy
-import os
 import sys
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-from dgl.data import DGLDataset
-#from torch.utils.data import Dataset
-#from torch.utils.data import DataLoader
-import ctypes
-import gc
-import multiprocessing as mp
-import numpy as np
-import rustworkx as rx
-import networkx as nx
 import time
 import af_reader_py
 import dgl
 from sklearn.preprocessing import StandardScaler
 from dgl.nn import GraphConv
+
 af_data_root = "../af_data/"
 
-def graph_coloring(nx_G):
-    coloring = rx.graph_greedy_color(nx_G)
-    return coloring
-
-def calculate_node_features(nx_G, hcat, card, noselfatt, maxb, gr, eigenvector_centrality):
-    #coloring = graph_coloring(nx_G)
-    #tic = time.perf_counter()
-    #eigenvector_centrality = rx.eigenvector_centrality(nx_G, max_iter=10000)
-    #toc = time.perf_counter()
-    #print("EIGEN_VEC : ", toc-tic)
-    tic = time.perf_counter()
-    page_rank = rx.pagerank(nx_G)
-    print("PAGERANK : ", time.perf_counter()-tic)
-    tic = time.perf_counter()
-    #closeness_centrality = rx.closeness_centrality(nx_G)
-    print("CLOSENESS : ", time.perf_counter()-tic)
-    #in_degrees = nx_G.in_degree()
-    #out_degrees = nx_G.out_degree()
-    tic = time.perf_counter()
-    raw_features = {}
-    for node in nx_G.nodes():
-        raw_features[node] = [
-            #coloring[node],
-            page_rank[node],
-            #closeness_centrality[node],
-            eigenvector_centrality[node],
-            nx_G.in_degree(node),
-            nx_G.out_degree(node),
-            hcat[node],
-            card[node],
-            noselfatt[node],
-            maxb[node],
-            gr[node]
-        ]
-    print("RAW : ", time.perf_counter()-tic)
-    # Normalize the features
-    tic = time.perf_counter()
-    scaler = StandardScaler()
-    nodes = list(nx_G.nodes())
-    feature_matrix = scaler.fit_transform([raw_features[node] for node in nodes])
-    print("SCAL : ", time.perf_counter()-tic)
-
-    # Create the normalized features dictionary
-    normalized_features = {node: feature_matrix[i] for i, node in enumerate(nodes)}
-
-    return normalized_features
-"""
-def standard_feature(raw_features):
-    scaler = StandardScaler()
-    #nodes = list(nx_G.nodes())
-    #feature_matrix = scaler.fit_transform([raw_features[i] for i, node in enumerate(nodes)])
-    
-    # Create the normalized features dictionary
-    #normalized_features = {node: feature_matrix[i] for i, node in enumerate(nodes)}
-    return feature_matrix
-"""
 def transfom_to_graph(label_path, n):
     f = open(label_path, 'r')
     data = f.read()
