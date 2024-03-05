@@ -100,7 +100,7 @@ def get_item(af_path):
     nxg.add_edges_from(att)
     tic = time.perf_counter()
     tic3 = time.perf_counter()
-    page_rank = list(nx.pagerank(nxg).values())
+    #page_rank = list(nx.pagerank(nxg).values())
     degree_centrality = list(nx.degree_centrality(nxg).values())
     in_degrees = list( s for (i, s) in nxg.in_degree())
     out_degrees = list( s for (i, s) in nxg.out_degree())
@@ -108,7 +108,7 @@ def get_item(af_path):
     #out_degrees = nxg.out_degree()
     fn = [[0,0,0,0,0]]*nxg.number_of_nodes()
     tic = time.perf_counter()
-    raw_features = af_reader_py.compute_features(af_path, page_rank, degree_centrality, in_degrees, out_degrees, 10000, 0.00001 )
+    raw_features = af_reader_py.compute_features(af_path, degree_centrality, in_degrees, out_degrees, 10000, 0.00001 )
     print("Python wrappe the function : ", time.perf_counter()-tic, " sec")
 
 
