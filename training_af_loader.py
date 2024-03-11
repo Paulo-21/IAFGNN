@@ -1,66 +1,17 @@
-import copy
 import os
-import sys
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
 from dgl.data import DGLDataset
-#from torch.utils.data import Dataset
-#from torch.utils.data import DataLoader
-import ctypes
-import multiprocessing as mp
-import numpy as np
-import networkx as nx
-import time
 import af_reader_py
 import statistics
 import platform
-
-"""
-from torch_geometric.nn import GCNConv, GraphConv
-from torch_geometric.utils import *
-"""
 import dgl
 from sklearn.preprocessing import StandardScaler
 from dgl.nn import GraphConv
-af_data_root = "../af_data/"
-def graph_coloring(nx_G):
-    coloring = nx.algorithms.coloring.greedy_color(nx_G, strategy='largest_first')
-    return coloring
 
-def calculate_node_features(nx_G, hcat, card, noselfatt, maxb, gr):
-    coloring = graph_coloring(nx_G)
-    page_rank = nx.pagerank(nx_G)
-    closeness_centrality = nx.degree_centrality(nx_G)
-    eigenvector_centrality = nx.eigenvector_centrality_numpy(nx_G, max_iter=10000)
-    in_degrees = nx_G.in_degree()
-    out_degrees = nx_G.out_degree()
-
-    raw_features = {}
-    for node in nx_G.nodes():
-        raw_features[node] = [
-            coloring[node],
-            page_rank[node],
-            closeness_centrality[node],
-            eigenvector_centrality[node],
-            in_degrees[node],
-            out_degrees[node],
-            hcat[node], 
-            card[node],
-            noselfatt[node],
-            maxb[node],
-            gr[node]
-        ]
-
-    # Normalize the features
-    scaler = StandardScaler()
-    nodes = list(nx_G.nodes())
-    feature_matrix = scaler.fit_transform([raw_features[node] for node in nodes])
-
-    # Create the normalized features dictionary
-    normalized_features = {node: feature_matrix[i] for i, node in enumerate(nodes)}
-
-    return normalized_features
+af_data_root = "../af_dataset/"
+result_root = "../af_data/"
 
 def transfom_to_graph(label_path, n):
     f = open(label_path, 'r')
@@ -72,67 +23,17 @@ def transfom_to_graph(label_path, n):
         target[int(n)] = 1.0
     return torch.tensor(target, requires_grad=False).to(device)
 
-
-def reading_cnf(path):
-    file = open(path).read().splitlines(True)
-    first = file.pop(0).split(' ')
-    nb_arg = int(first[2])
-    args = list([s for s in range(0, nb_arg)])
-    att = []
-    for l in file:
-        s = l.split(' ')
-        att.append([int(s[0]), int(s[1])])
-
-    return args, att
-    
-def read_apx(path):
-    i = 0
-    map = {}
-    att = []
-    file = open(path).read().splitlines(True)
-    for line in file:
-        if line[:3] == "arg":
-            line = line[4:-3]
-            map[line] = i
-            i+=1
-        elif line[:3] == "att":
-            line = line[4:-3]
-            s = line.split(",")
-            att.append([map[s[0]], map[s[1]]])
-    arg = list([s for s in range(0, i)])
-    return att, arg
-
 def get_item(af_name, af_dir, label_dir):
-    
     af_path = os.path.join(af_dir,af_name)
     label_path = os.path.join(label_dir,af_name)
-    tic = time.perf_counter()
-    #att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path+".af")
-    att1, att2, nb_el, hcat, card, noselfatt, maxb, gr = af_reader_py.reading_cnf_for_dgl_with_semantics(af_path)
-    if nb_el > 25000:
-        #print("pop")
-        return [[], [], [], nb_el]
-    
-    toc = time.perf_counter()
-    #print(toc-tic , " seconds for RUST ")
+    att1, att2, nb_el = af_reader_py.reading_cnf_for_dgl(af_path)
     target = transfom_to_graph(label_path, nb_el)
-    
-    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), device=device)#.to(device)
-    #print("Graph build in ", toc-tic , " sec")
-    features_tensor = torch.Tensor(3).to(device)
-    if os.path.isfile(af_data_root+"features_tensor/" + "" + af_name+".pt"):
-        features_tensor = torch.load(af_data_root+"features_tensor/" + "" + af_name+".pt").to(device)
-        #print("loaded in ", toc-tic , " sec")
-    else:
-        nxg = nx.DiGraph()
-        nodes = list([s for s in range(0, nb_el)])
-        att = list([([s, att2[i]]) for i, s in enumerate(att1)])
-        nxg.add_nodes_from(nodes)
-        nxg.add_edges_from(att)
-        features  = calculate_node_features(nxg, hcat, card, noselfatt, maxb, gr)
-        features_tensor = torch.tensor(np.array([features[node] for node in nxg.nodes()]), dtype=torch.float32).to(device)
-        torch.save(features_tensor, af_data_root+"features_tensor/" + "" + af_name+".pt")
-    
+    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), device=device).to(device)
+    raw_features = af_reader_py.compute_features(af_path, 10000, 0.00001 )
+    scaler = StandardScaler()
+    features = scaler.fit_transform(raw_features)
+    features_tensor = torch.tensor(features, dtype=torch.float32, requires_grad=False).to(device)
+    #    torch.save(features_tensor, af_data_root+"features_tensor/" + "" + af_name+".pt")
     if graph.number_of_nodes() < nb_el:
         graph.add_nodes(nb_el - graph.number_of_nodes())
     
@@ -142,6 +43,7 @@ def get_item(af_name, af_dir, label_dir):
     inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32, requires_grad=False).to(device)
     inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
     inputs_to_overwrite.copy_(features_tensor)
+    
     return graph, inputs, target, nb_el
 
 class CustumGraphDataset(DGLDataset):
@@ -152,8 +54,8 @@ class CustumGraphDataset(DGLDataset):
     def __len__(self):
         return len(self.graphs)
     def process(self):
-        self.af_dir = af_data_root+"dataset_af/"
-        self.label_dir = af_data_root+"result/"
+        self.af_dir = af_data_root+"dataset_af_2023/"
+        self.label_dir = result_root+"result_DC-CO/"
         self.graphs = []
         self.labels = []
         for file in os.listdir(self.label_dir):

@@ -29,7 +29,7 @@ def get_item(af_path):
     print(toc-tic , " seconds for RUST ")
     tic = time.perf_counter()
     tic3 = time.perf_counter()
-    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), device=device)#.to(device)
+    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes=nb_el, device=device)#.to(device)
     print("dgl ",time.perf_counter()-tic)
     """
     tic = time.perf_counter()
