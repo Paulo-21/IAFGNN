@@ -1,3 +1,4 @@
+import os
 import sys
 import torch 
 import torch.nn as nn
@@ -86,14 +87,18 @@ class GCN(nn.Module):
         return h.squeeze()  # Remove the last dimension
 
 file = sys.argv[1]
+task = sys.argv[2]
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-#model = GCN(128, 128, 128, 1).to(device)
+model = GCN(128, 128, 128, 1).to(device)
 tic = time.perf_counter()
 graph, inputs = get_item(af_path=file)
+
 print("get item ", time.perf_counter()-tic)
-"""
+
+if os.path.exists("v3-"+task+".pth"):
+    model.load_state_dict(torch.load("v3-"+task+".pth"))
+
 with torch.no_grad():
     out = model(graph, inputs)
     predicted = (torch.sigmoid(out.squeeze())>0.9).float()
-"""

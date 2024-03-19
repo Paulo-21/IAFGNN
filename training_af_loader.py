@@ -2,6 +2,7 @@ import os
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.optim.lr_scheduler as lr_scheduler
 from dgl.data import DGLDataset
 import af_reader_py
 import statistics
@@ -54,7 +55,7 @@ class CustumGraphDataset(DGLDataset):
     def __len__(self):
         return len(self.graphs)
     def process(self):
-        self.af_dir = af_data_root+"dataset_af_2023/"
+        self.af_dir = af_data_root+"dataset_af_2017/"
         self.label_dir = result_root+"result_DC-CO/"
         self.graphs = []
         self.labels = []
@@ -104,6 +105,7 @@ model = GCN(128, 128, 128, 1).to(device)
 if platform.system() == "Linux" and torch.cuda.is_available():
     model = torch.compile(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
 loss = nn.BCELoss()
 model.train()
 print("Loading Data...")
@@ -166,3 +168,5 @@ with torch.no_grad():
         tot_el_no += sum(element1 == 0.0   for element1 in label).item()
 
 print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
+
+torch.save(model.state_dict(), "v3-DC-CO.pth")
