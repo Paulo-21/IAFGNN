@@ -57,9 +57,10 @@ class CustumGraphDataset(DGLDataset):
     def __len__(self):
         return len(self.graphs)
     def process(self):
-        list_year_dir = ["2017", "2023"]
+        #list_year_dir = ["2017", "2023"]
+        list_year_dir = ["2023"]
         self.af_dir = af_data_root+"dataset_af"
-        self.label_dir = result_root+"result_DS-ST"
+        self.label_dir = result_root+"result_DC-CO"
         self.graphs = []
         self.labels = []
         list_unique_file = []
@@ -75,6 +76,8 @@ class CustumGraphDataset(DGLDataset):
                     all_iter.append(true_name)
                     #print(f," ",  self.label_dir+"_"+year )
                     graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/")
+                    if nb_el > 25000:
+                        continue
                     graph.ndata["feat"] = features
                     graph.ndata["label"] = label
                     self.graphs.append(graph)
@@ -151,6 +154,7 @@ for epoch in range(200):
         optimizer.step()
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
+    scheduler.step()
     print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
     #print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
 """
