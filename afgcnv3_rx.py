@@ -88,7 +88,7 @@ class GCN(nn.Module):
 
 file = sys.argv[1]
 task = sys.argv[2]
-
+argId = sys.argv[3]
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = GCN(128, 128, 128, 1).to(device)
 tic = time.perf_counter()
@@ -101,4 +101,8 @@ if os.path.exists("v3-"+task+".pth"):
 
 with torch.no_grad():
     out = model(graph, inputs)
-    predicted = (torch.sigmoid(out.squeeze())>0.9).float()
+    predicted = (torch.sigmoid(out.squeeze())>0.5).float()
+    if predicted[argId] == True:
+        print("YES")
+    else:
+        print("NO")

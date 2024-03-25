@@ -14,6 +14,7 @@ from dgl.nn import GraphConv
 
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
+task = "DS-ST"
 
 def transfom_to_graph(label_path, n):
     f = open(label_path, 'r')
@@ -35,7 +36,7 @@ def get_item(af_name, af_dir, label_dir):
     raw_features = af_reader_py.compute_features(af_path, 10000, 0.00001 )
     scaler = StandardScaler()
     features = scaler.fit_transform(raw_features)
-    features_tensor = torch.tensor(features, dtype=torch.float32, requires_grad=False).to(device)
+    features_tensor = torch.tensor(features, dtype=torch.float32, requires_grad=False)#.to(device)
     #    torch.save(features_tensor, af_data_root+"features_tensor/" + "" + af_name+".pt")
     if graph.number_of_nodes() < nb_el:
         graph.add_nodes(nb_el - graph.number_of_nodes())
@@ -49,7 +50,7 @@ def get_item(af_name, af_dir, label_dir):
     
     return graph, inputs, target, nb_el
 
-class CustumGraphDataset(DGLDataset):
+class TrainingGraphDataset(DGLDataset):
     def __init__(self, af_dir, label_dir):
         super().__init__(name="Af dataset")
         self.label_dir = label_dir
@@ -58,13 +59,12 @@ class CustumGraphDataset(DGLDataset):
         return len(self.graphs)
     def process(self):
         #list_year_dir = ["2017", "2023"]
-        list_year_dir = ["2023"]
+        list_year_dir = ["2017"]
         self.af_dir = af_data_root+"dataset_af"
-        self.label_dir = result_root+"result_DC-CO"
+        self.label_dir = result_root+"result_"+task
         self.graphs = []
         self.labels = []
         list_unique_file = []
-        all_iter = []
         for year in list_year_dir:
             iter = os.listdir(self.label_dir +"_"+ year)
             for f in iter:
@@ -72,24 +72,49 @@ class CustumGraphDataset(DGLDataset):
                 true_name = true_name.replace(".af", "")
                 true_name = true_name.replace(".tgf", "")
                 true_name = true_name.replace(".old", "")
-                if true_name not in all_iter:
-                    all_iter.append(true_name)
+                if true_name not in list_unique_file:
+                    list_unique_file.append(true_name)
                     #print(f," ",  self.label_dir+"_"+year )
                     graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/")
-                    if nb_el > 25000:
+                    if nb_el > 100000:
                         continue
                     graph.ndata["feat"] = features
                     graph.ndata["label"] = label
                     self.graphs.append(graph)
-            #all_iter = all_iter+iter
-        """
 
-        for file in os.listdir(self.label_dir):
-            graph, features, label, nb_el = get_item(file, self.af_dir, self.label_dir)
-            graph.ndata["feat"] = features
-            graph.ndata["label"] = label
-            self.graphs.append(graph)
-        """
+    def __getitem__(self, idx:int):
+        return self.graphs[idx]
+class ValisationDataset(DGLDataset):
+    def __init__(self, af_dir, label_dir):
+        super().__init__(name="Validation Dataset")
+        self.label_dir = label_dir
+        self.af_dir = af_dir
+    def __len__(self):
+        return len(self.graphs)
+    def process(self):
+        #list_year_dir = ["2017", "2023"]
+        list_year_dir = ["2023"]
+        self.af_dir = af_data_root+"dataset_af"
+        self.label_dir = result_root+"result_"+task
+        self.graphs = []
+        self.labels = []
+        list_unique_file = []
+        for year in list_year_dir:
+            iter = os.listdir(self.label_dir +"_"+ year)
+            for f in iter:
+                true_name = f.replace(".apx", "")
+                true_name = true_name.replace(".af", "")
+                true_name = true_name.replace(".tgf", "")
+                true_name = true_name.replace(".old", "")
+                if true_name not in list_unique_file:
+                    list_unique_file.append(true_name)
+                    #print(f," ",  self.label_dir+"_"+year )
+                    graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/")
+                    if nb_el > 100000:
+                        continue
+                    graph.ndata["feat"] = features
+                    graph.ndata["label"] = label
+                    self.graphs.append(graph)
 
     def __getitem__(self, idx:int):
         return self.graphs[idx]
@@ -129,20 +154,21 @@ print("runtime : ", device)
 model = GCN(128, 128, 128, 1).to(device)
 if platform.system() == "Linux" and torch.cuda.is_available():
     model = torch.compile(model)
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
 scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
 loss = nn.BCELoss()
 model.train()
 print("Loading Data...")
-af_dataset = CustumGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
+af_dataset = TrainingGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
 data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=True)
-test_data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=False)
+#print("FINAL TEST LOADING...")
+#test_data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=False)
 #train_dataloader = DataLoader(af_dataset, batch_size=64)
 print("Start training")
+model.train()
 for epoch in range(200):
     tot_loss = []
     tot_loss_v = 0
-    model.train()
     for graph in data_loader:
         inputs = graph.ndata["feat"]
         label = graph.ndata["label"]
@@ -151,10 +177,11 @@ for epoch in range(200):
         predicted = (torch.sigmoid(out.squeeze())).float()
         losse = loss(predicted, label)
         losse.backward()
-        optimizer.step()
+        optimizer.step()  
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
-    scheduler.step()
+    #if epoch > 120:
+    #    scheduler.step()
     print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
     #print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
 """
@@ -175,8 +202,8 @@ for epoch in range(200):
             tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
             tot_el_no += sum(element1 == 0.0   for element1 in label).item()
 """
-print("final test")
-
+print("final test start")
+af_dataset = ValisationDataset(af_data_root+"dataset_af/", af_data_root+"result/")
 model.eval()
 acc_yes = 0
 acc_no = 0
@@ -187,7 +214,7 @@ with torch.no_grad():
         inputs = graph.ndata["feat"]
         label = graph.ndata["label"]
         out = model(graph, inputs)
-        predicted = (torch.sigmoid(out.squeeze())>0.9).float()
+        predicted = (torch.sigmoid(out.squeeze())>0.5).float()
         acc_yes += sum(element1 == element2 == 1.0  for element1, element2 in zip(predicted, label)).item()
         acc_no += sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
         tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
@@ -195,4 +222,4 @@ with torch.no_grad():
 
 print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
 
-torch.save(model.state_dict(), "v3-DC-CO.pth")
+torch.save(model.state_dict(), "v3-"+task+".pth")
