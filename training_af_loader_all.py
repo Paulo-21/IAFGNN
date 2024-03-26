@@ -1,4 +1,4 @@
-from itertools import chain
+#from itertools import chain
 import os
 import torch 
 import torch.nn as nn
@@ -16,6 +16,7 @@ af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
 task = "DS-ST"
 
+
 def transfom_to_graph(label_path, n):
     f = open(label_path, 'r')
     data = f.read()
@@ -24,22 +25,37 @@ def transfom_to_graph(label_path, n):
         if n == '':
             continue
         target[int(n)] = 1.0
-    return torch.tensor(target, requires_grad=False).to(device)
-
-def get_item(af_name, af_dir, label_dir):
+    return torch.tensor(target, requires_grad=False, device=device)
+def light_get_item(af_name, af_dir, label_dir, year):
+    af_path = os.path.join(af_dir,af_name)
+    label_path = os.path.join(label_dir,af_name)
+    att1, att2, nb_el = af_reader_py.reading_file_for_dgl(af_path)
+    target = transfom_to_graph(label_path, nb_el)
+    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)
+    print("L : ",nb_el, " ", graph.number_of_nodes())
+    if graph.number_of_nodes() < nb_el:
+        print("DIFFFFFFFFFFFFFFFFFFFFFFFFFFF : ", af_name)
+        #graph.add_nodes(nb_el - graph.number_of_nodes())
+    inputs = torch.load(af_data_root+"all_features/"+year+"/"+af_name+".pt", map_location=device)
+    return graph, inputs, target, nb_el
+ 
+def get_item(af_name, af_dir, label_dir, year):
     print(af_name," ",  af_dir, " ", label_dir)
     af_path = os.path.join(af_dir,af_name)
     label_path = os.path.join(label_dir,af_name)
     att1, att2, nb_el = af_reader_py.reading_file_for_dgl(af_path)
     target = transfom_to_graph(label_path, nb_el)
-    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), device=device).to(device)
+    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)#.to(device)
     raw_features = af_reader_py.compute_features(af_path, 10000, 0.00001 )
     scaler = StandardScaler()
     features = scaler.fit_transform(raw_features)
-    features_tensor = torch.tensor(features, dtype=torch.float32, requires_grad=False)#.to(device)
-    #    torch.save(features_tensor, af_data_root+"features_tensor/" + "" + af_name+".pt")
+    features_tensor = torch.tensor(features, dtype=torch.float32, requires_grad=False).to(device)
+    torch.save(features_tensor, af_data_root+"all_features/"+year+"/"+af_name+".pt")
+    print("N : ",nb_el," ", graph.number_of_nodes())
     if graph.number_of_nodes() < nb_el:
-        graph.add_nodes(nb_el - graph.number_of_nodes())
+        print("---------------------------------------------------------------------------------")
+        print("DIFFFFFFFFFFFFFFFFFFFFFFFFFFF : ", af_name)
+        #graph.add_nodes(nb_el - graph.number_of_nodes())
     
     graph = dgl.add_self_loop(graph)
     num_rows_to_overwrite = features_tensor.size(0)
@@ -72,14 +88,31 @@ class TrainingGraphDataset(DGLDataset):
                 true_name = true_name.replace(".af", "")
                 true_name = true_name.replace(".tgf", "")
                 true_name = true_name.replace(".old", "")
+                #if f != "afinput_exp_acyclic_indvary3_step7_batch_yyy09.apx":
+                #    continue
+                #if True:
                 if true_name not in list_unique_file:
                     list_unique_file.append(true_name)
                     #print(f," ",  self.label_dir+"_"+year )
-                    graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/")
-                    if nb_el > 100000:
+                    """
+                    if os.path.exists(af_data_root+"all_features/"+year+"/"+f+".pt"):
+                        graph, features, label, nb_el = light_get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/", year)
+                    else:
+                    """
+                    if f != "stb_291_2.apx":
+                        continue
+                    print("NORMAL")
+                    graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/", year)
+                    print("LIGHT")
+                    graph, features, label, nb_el = light_get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/", year)
+                    if graph.number_of_nodes() != len(features):
+                        print(f)
+                        print(graph.number_of_nodes(), " ", len(features))
+                    if nb_el > 70000:
                         continue
                     graph.ndata["feat"] = features
                     graph.ndata["label"] = label
+                    #self.labels.append(label)
                     self.graphs.append(graph)
 
     def __getitem__(self, idx:int):
@@ -109,10 +142,14 @@ class ValisationDataset(DGLDataset):
                 if true_name not in list_unique_file:
                     list_unique_file.append(true_name)
                     #print(f," ",  self.label_dir+"_"+year )
-                    graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/")
-                    if nb_el > 100000:
+                    if os.path.exists(af_data_root+"all_features/"+year+"/"):
+                        graph, features, label, nb_el = light_get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/", year)
+                    else:
+                        graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/", year)
+                    if nb_el > 70000:
                         continue
                     graph.ndata["feat"] = features
+                    #self.labels.append(label)
                     graph.ndata["label"] = label
                     self.graphs.append(graph)
 
@@ -143,7 +180,7 @@ class GCN(nn.Module):
         h = self.layer4(g, h + inputs)
         h = F.relu(h)
         h = self.dropout(h)
-        #h = self.layer5(g, h + inputs)
+        #h = self.layer5(g, h )
         #h = F.relu(h)
         #h = self.dropout(h)
         h = self.fc(h)
@@ -152,11 +189,11 @@ class GCN(nn.Module):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("runtime : ", device)
 model = GCN(128, 128, 128, 1).to(device)
-if platform.system() == "Linux" and torch.cuda.is_available():
-    model = torch.compile(model)
+#if platform.system() == "Linux" and torch.cuda.is_available():
+#    model = torch.compile(model)
 optimizer = torch.optim.Adam(model.parameters(), lr=0.005)
 scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
-loss = nn.BCELoss()
+loss = nn.BCELoss().cuda()
 model.train()
 print("Loading Data...")
 af_dataset = TrainingGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
@@ -166,12 +203,13 @@ data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle
 #train_dataloader = DataLoader(af_dataset, batch_size=64)
 print("Start training")
 model.train()
-for epoch in range(200):
+for epoch in range(20000):
     tot_loss = []
     tot_loss_v = 0
     for graph in data_loader:
         inputs = graph.ndata["feat"]
         label = graph.ndata["label"]
+        
         optimizer.zero_grad()
         out = model(graph, inputs)
         predicted = (torch.sigmoid(out.squeeze())).float()

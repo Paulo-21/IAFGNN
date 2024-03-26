@@ -4,8 +4,8 @@ import time
 
 from psutil import TimeoutExpired
 
-dir = "../af_data/dataset_af/"
-max_time = 60
+dir = "../af_data/main/"
+max_time = 30
 t1 , t2= 0, 0
 n_timeout1, n_error1, n_timeout2, n_error2 = 0, 0, 0, 0
 tot_t1, tot_t2 = 0,0
@@ -29,7 +29,7 @@ for file in os.listdir(dir):
         t1 = "error"
         tot_t1+=max_time*2
         n_error1 +=1
-    """
+    
     try:
         tic2 = time.perf_counter()
         code1 = subprocess.call(["python", "solver_ag.py", "--filepath", path, "--task", "DC-CO", "--argument", "1"], timeout=max_time)
@@ -44,7 +44,7 @@ for file in os.listdir(dir):
         t2 = "error"
         n_error2 +=1
         tot_t2+=max_time*2
-    """
+    
     print(t1, " ", t2)
 
 print("---------------------------------------------------")
