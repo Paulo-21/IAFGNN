@@ -195,7 +195,7 @@ print("runtime : ", device)
 model = GCN(128, 128, 128, 1).to(device)
 model_path = "v3-"+task+".pth"
 if os.path.exists(model_path):
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=device))
 #if platform.system() == "Linux" and torch.cuda.is_available():
 #    model = torch.compile(model)
 loss = nn.BCELoss().cuda()
