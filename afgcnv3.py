@@ -1,14 +1,10 @@
-import os
 import sys
-import torch 
-import torch.nn as nn
-import torch.nn.functional as F
-import af_reader_py
-import dgl
-from sklearn.preprocessing import StandardScaler
-from dgl.nn import GraphConv
-
+"""
+1.94 sec before import optimisation
+25 ms after
+"""
 def get_item(af_path, arg_id):
+    import af_reader_py
     raw_features ,att1, att2, nb_el, arg_pos, acceptance = af_reader_py.special(af_path, arg_id)
     if acceptance != 2:
         if acceptance == 1:
@@ -20,6 +16,9 @@ def get_item(af_path, arg_id):
         else:
             print("ERROR")
             exit(1)
+    import torch
+    import dgl
+    from sklearn.preprocessing import StandardScaler
     graph = dgl.graph((att1,att2), num_nodes=nb_el, device=device)
     scaler = StandardScaler()
     features = scaler.fit_transform(raw_features)
@@ -34,6 +33,17 @@ def get_item(af_path, arg_id):
     inputs_to_overwrite.copy_(features_tensor)
     return graph, inputs, arg_pos
 
+
+file = sys.argv[1]
+task = sys.argv[2]
+argId = sys.argv[3]
+device = "cpu"
+graph, inputs, arg_pos = get_item(af_path=file, arg_id=argId)
+import os
+import torch.nn as nn
+from dgl.nn import GraphConv
+import torch
+import torch.nn.functional as F
 class GCN(nn.Module):
     def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
         super(GCN, self).__init__()
@@ -61,12 +71,7 @@ class GCN(nn.Module):
         h = self.fc(h)
         return h.squeeze()  # Remove the last dimension
 
-file = sys.argv[1]
-task = sys.argv[2]
-argId = sys.argv[3]
-device = "cpu"
-model = GCN(128, 128, 128, 1).to(device)
-graph, inputs, arg_pos = get_item(af_path=file, arg_id=argId)
+model = GCN(128, 128, 128, 1)#.to(device)
 
 if os.path.exists("v3-"+task+".pth"):
     model.load_state_dict(torch.load("v3-"+task+".pth"))
