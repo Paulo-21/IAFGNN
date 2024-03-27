@@ -15,7 +15,7 @@ from dgl.nn import GraphConv
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
 task = "DS-ST"
-MAX_ARG = 90000
+MAX_ARG = 200000
 v = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
 print(v)
 #= "expandable_segments:True"
@@ -144,17 +144,15 @@ class ValisationDataset(DGLDataset):
                 true_name = true_name.replace(".old", "")
                 if true_name not in list_unique_file:
                     list_unique_file.append(true_name)
-                    #print(f," ",  self.label_dir+"_"+year )
-                    if os.path.exists(af_data_root+"all_features/"+year+"/"):
+                    if os.path.exists(af_data_root+"all_features/"+year+"/"+f+".pt"):
                         graph, features, label, nb_el = light_get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/", year)
                     else:
                         graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/", year)
-                    if nb_el > MAX_ARG:
-                        continue
-                    graph.ndata["feat"] = features
-                    #self.labels.append(label)
-                    graph.ndata["label"] = label
-                    self.graphs.append(graph)
+                    if nb_el < MAX_ARG:
+                        graph.ndata["feat"] = features
+                        graph.ndata["label"] = label
+                        #self.labels.append(label)
+                        self.graphs.append(graph)
 
     def __getitem__(self, idx:int):
         return self.graphs[idx]
@@ -210,7 +208,7 @@ data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle
 #train_dataloader = DataLoader(af_dataset, batch_size=64)
 print("Start training")
 model.train()
-for epoch in range(20000):
+for epoch in range(400):
     tot_loss = []
     tot_loss_v = 0
     for graph in data_loader:
