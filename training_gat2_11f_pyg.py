@@ -1,24 +1,25 @@
-#from itertools import chain
 import os
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim.lr_scheduler as lr_scheduler
+#import torch.optim.lr_scheduler as lr_scheduler
 from dgl.data import DGLDataset
 import af_reader_py
 import statistics
-import platform
-import dgl
+#from torch.cuda.amp import autocast, GradScaler
+#import dgl
 from sklearn.preprocessing import StandardScaler
-from dgl.nn import GraphConv
-
+#from dgl.nn import GATv2Conv
+from torch_geometric.data import Data
+from torch_geometric.nn import GATv2Conv, GCNConv
+from torch_geometric.loader import DataLoader
+from torch_geometric.utils import from_dgl, add_self_loops
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
 task = "DS-ST"
 MAX_ARG = 200000
 v = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
 print(v)
-#= "expandable_segments:True"
 
 def transfom_to_graph(label_path, n):
     f = open(label_path, 'r')
@@ -36,20 +37,19 @@ def light_get_item(af_name, af_dir, label_dir, year):
     if nb_el > MAX_ARG:
         return None, None, None, 1000000
     target = transfom_to_graph(label_path, nb_el)
-    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)
-    print("L : ",nb_el, " ", graph.number_of_nodes())
-    if graph.number_of_nodes() < nb_el:
-        print("DIFFFFFFFFFFFFFFFFFFFFFFFFFFF : ", af_name)
-        #graph.add_nodes(nb_el - graph.number_of_nodes())
-    graph = dgl.add_self_loop(graph)
-    features_tensor = torch.load(af_data_root+"all_features/"+year+"/"+af_name+".pt", map_location=device)
-    num_rows_to_overwrite = features_tensor.size(0)
-    num_columns_in_features = features_tensor.size(1)
-    inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32, requires_grad=False).to(device)
-    inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
-    inputs_to_overwrite.copy_(features_tensor)
-    return graph, inputs, target, nb_el
- 
+    #graph_d = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)
+    #print("L : ",nb_el, " ", graph.number_of_nodes())
+    att = [att1, att2]
+    #for att_1, att_2 in zip(att1, att2):
+    #    att.append([att_1, att_2])
+    inputs = torch.load(af_data_root+"all_features/"+year+"/"+af_name+".pt", map_location=device)
+    edge_index = torch.tensor(att)
+    edge_index, el = add_self_loops(edge_index, num_nodes=nb_el)
+    
+
+    data = Data(x=inputs, edge_index=edge_index, y = target)
+    return data, inputs, target, nb_el
+
 def get_item(af_name, af_dir, label_dir, year):
     print(af_name," ",  af_dir, " ", label_dir)
     af_path = os.path.join(af_dir,af_name)
@@ -58,24 +58,15 @@ def get_item(af_name, af_dir, label_dir, year):
     if nb_el > MAX_ARG:
         return None, None, None, 1000000
     target = transfom_to_graph(label_path, nb_el)
-    graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)#.to(device)
+    graph_d = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)#.to(device)
+    graph = from_dgl(graph_d)
     raw_features = af_reader_py.compute_features(af_path, 10000, 0.00001 )
     scaler = StandardScaler()
     features = scaler.fit_transform(raw_features)
-    features_tensor = torch.tensor(features, dtype=torch.float32, requires_grad=False).to(device)
-    torch.save(features_tensor, af_data_root+"all_features/"+year+"/"+af_name+".pt")
-    print("N : ",nb_el," ", graph.number_of_nodes())
-    if graph.number_of_nodes() < nb_el:
-        print("---------------------------------------------------------------------------------")
-        print("DIFFFFFFFFFFFFFFFFFFFFFFFFFFF : ", af_name)
-        #graph.add_nodes(nb_el - graph.number_of_nodes())
-    
-    graph = dgl.add_self_loop(graph)
-    num_rows_to_overwrite = features_tensor.size(0)
-    num_columns_in_features = features_tensor.size(1)
-    inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32, requires_grad=False).to(device)
-    inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
-    inputs_to_overwrite.copy_(features_tensor)
+    inputs = torch.tensor(features, dtype=torch.float16, requires_grad=False).to(device)
+    torch.save(inputs, af_data_root+"all_features/"+year+"/"+af_name+".pt")
+    #print("N : ",nb_el," ", graph.number_of_nodes())
+    graph = add_self_loops(graph)
     
     return graph, inputs, target, nb_el
 
@@ -113,8 +104,8 @@ class TrainingGraphDataset(DGLDataset):
                     else:
                         graph, features, label, nb_el = get_item(f, self.af_dir+"_"+year+"/", self.label_dir+"_"+year+"/", year)
                     if nb_el < MAX_ARG:
-                        graph.ndata["feat"] = features
-                        graph.ndata["label"] = label
+                        #graph.ndata["feat"] = features
+                        #graph.ndata["label"] = label
                         #self.labels.append(label)
                         self.graphs.append(graph)
 
@@ -156,95 +147,75 @@ class ValisationDataset(DGLDataset):
 
     def __getitem__(self, idx:int):
         return self.graphs[idx]
+class GAT(torch.nn.Module):
+    def __init__(self, in_channels, hidden_channels, out_channels, heads):
+        super().__init__()
+        self.conv1 = GATv2Conv(in_channels, hidden_channels, heads[0])
+        # On the Pubmed dataset, use `heads` output heads in `conv2`.
+        self.conv2 = GATv2Conv(hidden_channels * heads[0], hidden_channels, heads[1])
+        self.conv3 = GATv2Conv(hidden_channels * heads[1], out_channels, 1,
+            concat=False)
 
-class GCN(nn.Module):
-    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
-        super(GCN, self).__init__()
-        self.layer1 = GraphConv(in_features, hidden_features)
-        self.layer2 = GraphConv(hidden_features, hidden_features)
-        self.layer3 = GraphConv(hidden_features, hidden_features)
-        self.layer4 = GraphConv(hidden_features, hidden_features)
-        #self.layer5 = GraphConv(hidden_features, fc_features)
-        self.fc = nn.Linear(fc_features, num_classes)
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, g, inputs):
-        h = self.layer1(g, inputs)
-        h = F.relu(h)
-        h = self.dropout(h)
-        h = self.layer2(g, h + inputs)
-        h = F.relu(h)
-        h = self.dropout(h)
-        h = self.layer3(g, h + inputs)
-        h = F.relu(h)
-        h = self.dropout(h)
-        h = self.layer4(g, h + inputs)
-        h = F.relu(h)
-        h = self.dropout(h)
-        #h = self.layer5(g, h )
-        #h = F.relu(h)
-        #h = self.dropout(h)
-        h = self.fc(h)
-        return h.squeeze()  # Remove the last dimension
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    def forward(self, x, edge_index):
+        x = F.elu(self.conv1(x, edge_index))
+        x = F.elu(self.conv2(x, edge_index))
+        x = self.conv3(x, edge_index)
+        return x
+device1 = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = "cpu"
 #device = "cpu"
 print("runtime : ", device)
-model = GCN(128, 128, 128, 1).to(device)
-model_path = "v3-"+task+".pth"
-if os.path.exists(model_path):
-    model.load_state_dict(torch.load(model_path, map_location=device))
-#if platform.system() == "Linux" and torch.cuda.is_available():
-#    model = torch.compile(model)
-loss = nn.BCELoss().cuda()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-#scheduler = lr_scheduler.LinearLR(optimizer, start_factor=1.0, end_factor=0.3, total_iters=10)
+print("runtime : ", device1)
+
+model = GAT(11, 5, 1, heads=[5,3,3]).to(device1)
+#jittable(model)
+#model = torch.jit.script(model)
+total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+print("total parameters : ", total_params)
+model_path = "v3-"+task+"-11-gatv2.pth"
+
+loss = nn.BCELoss()
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 model.train()
 print("Loading Data...")
 af_dataset = TrainingGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
-data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=True)
-#print("FINAL TEST LOADING...")
-#test_data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=64, shuffle=False)
-#train_dataloader = DataLoader(af_dataset, batch_size=64)
+data_loader = DataLoader(af_dataset.graphs, batch_size=4, shuffle=True)
+#data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=8, shuffle=True)
+
 print("Start training")
+#scaler = GradScaler()
 model.train()
+
 for epoch in range(400):
     tot_loss = []
     tot_loss_v = 0
+    i=0
     for graph in data_loader:
-        inputs = graph.ndata["feat"]
-        label = graph.ndata["label"]
-        
+        torch.cuda.empty_cache()
         optimizer.zero_grad()
-        out = model(graph, inputs)
+        #inputs = graph.ndata["feat"].to(device1)
+        #label = graph.ndata["label"].to(device1)
+        #graph_cdn = graph.to(device1)
+        
+        torch.cuda.empty_cache()
+        out = model(graph.x.to(device1), graph.edge_index.to(device1) )
         predicted = (torch.sigmoid(out.squeeze())).float()
-        losse = loss(predicted, label)
+        
+        torch.cuda.empty_cache()
+        losse = loss(predicted, graph.y.to(device1))
+        torch.cuda.empty_cache()
         losse.backward()
-        optimizer.step()  
+        torch.cuda.empty_cache()
+        optimizer.step()
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
-    #if epoch > 120:
-    #    scheduler.step()
-    print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
-    #print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
-"""
-    model.eval()
-    tot_el_yes = 0
-    tot_el_no = 0
-    acc_yes = 0
-    acc_no = 0
+    if epoch == 150:
+        for g in optimizer.param_groups:
+            g['lr'] = 0.001
+    print(i, "Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
 
-    with torch.no_grad():
-        for graph in test_data_loader:
-            inputs = graph.ndata["feat"]
-            label = graph.ndata["label"]
-            out = model(graph, inputs)
-            predicted = (torch.sigmoid(out.squeeze())>0.9).float()
-            acc_yes += sum(element1 == element2 == 1.0  for element1, element2 in zip(predicted, label)).item()
-            acc_no += sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
-            tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
-            tot_el_no += sum(element1 == 0.0   for element1 in label).item()
-"""
+#torch.save(model.state_dict(), model_path)
+
 print("final test start")
 af_dataset = ValisationDataset(af_data_root+"dataset_af/", af_data_root+"result/")
 model.eval()
@@ -252,17 +223,23 @@ acc_yes = 0
 acc_no = 0
 tot_el_yes = 0
 tot_el_no = 0
+mean_acc = 0
 with torch.no_grad():
     for graph in af_dataset:
-        inputs = graph.ndata["feat"]
-        label = graph.ndata["label"]
-        out = model(graph, inputs)
+        inputs = graph.ndata["feat"].to(device1)
+        label = graph.ndata["label"].to(device1)
+
+        out = model(graph.to(device1), inputs)
         predicted = (torch.sigmoid(out.squeeze())>0.5).float()
-        acc_yes += sum(element1 == element2 == 1.0  for element1, element2 in zip(predicted, label)).item()
-        acc_no += sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
-        tot_el_yes += sum(element1 == 1.0  for element1 in label).item()
-        tot_el_no += sum(element1 == 0.0   for element1 in label).item()
+        one_acc_yes = sum(element1 == element2 == 1.0  for element1, element2 in zip(predicted, label)).item()
+        one_acc_no = sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
+        acc_yes += one_acc_yes
+        acc_no += one_acc_no
+        tot_yes = sum(element1 == 1.0  for element1 in label).item()
+        tot_no = sum(element1 == 0.0   for element1 in label).item()
+        tot_el_yes += tot_yes
+        tot_el_no += tot_no
+        mean_acc += ((one_acc_yes+one_acc_no)/(tot_yes+tot_no))
 
 print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
-
-torch.save(model.state_dict(), "v3-"+task+".pth")
+print("acc mean : ", mean_acc/len(af_dataset))
