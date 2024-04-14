@@ -10,14 +10,14 @@ import DatasetDGL
 
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
-task = "DS-PR"
+task = "DC-ST"
 print(task)
 MAX_ARG = 200000
 v = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
 print("PYTORCH_CUDA_ALLOC_CONF : ", v)
 
 class GCN(nn.Module):
-    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
+    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.2):
         super(GCN, self).__init__()
         self.layer1 = GraphConv(in_features, hidden_features)
         self.layer2 = GraphConv(hidden_features, hidden_features)
@@ -36,11 +36,12 @@ class GCN(nn.Module):
         h = self.dropout(h)
         h = self.layer3(g, h + inputs)
         h = F.relu(h)
-        h = self.dropout(h)
+        #h = self.dropout(h)
         h = self.layer4(g, h + inputs)
         h = F.relu(h)
-        h = self.dropout(h)
+        #h = self.dropout(h)
         h = self.fc(h)
+        #h = F.sigmoid(h)
         return h.squeeze()  # Remove the last dimension
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -77,9 +78,9 @@ for epoch in range(400):
         optimizer.step()
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
-    if epoch == 150:
-        for g in optimizer.param_groups:
-            g['lr'] = 0.001
+    #if epoch == 150:
+        #for g in optimizer.param_groups:
+            #g['lr'] = 0.001
     
     print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
 

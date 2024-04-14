@@ -181,7 +181,7 @@ class ValisationDataset(DGLDataset):
     def __getitem__(self, idx:int):
         return self.graphs[idx]
 
-def test(model, task, device="cpu"):
+def test(model, task, device="cpu", rand=False):
     af_dataset = ValisationDataset(af_data_root+"dataset_af/", af_data_root+"result/", task=task, device=device)
     model.eval()
     acc_yes = 0
@@ -194,6 +194,13 @@ def test(model, task, device="cpu"):
     with torch.no_grad():
         for graph in af_dataset:
             inputs = graph.ndata["feat"]
+            if rand == True:
+                inputs_rand = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float, device=device)
+                num_rows_to_overwrite = inputs.size(0)
+                num_columns_in_features = inputs.size(1)
+                inputs_to_overwrite = inputs_rand.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
+                inputs_to_overwrite.copy_(inputs)
+                inputs = inputs_rand
             label = graph.ndata["label"]
             out = model(graph, inputs)
             predicted = (torch.sigmoid(out.squeeze())>0.5).float()

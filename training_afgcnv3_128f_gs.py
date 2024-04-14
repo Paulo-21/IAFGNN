@@ -1,15 +1,9 @@
-#from itertools import chain
 import os
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.optim.lr_scheduler as lr_scheduler
-from dgl.data import DGLDataset
-import af_reader_py
 import statistics
-import platform
 import dgl
-from sklearn.preprocessing import StandardScaler
 from dgl.nn import GraphConv
 import DatasetDGL
 af_data_root = "../af_dataset/"
@@ -22,13 +16,12 @@ print(v)
 #= "expandable_segments:True"
 
 class GCN(nn.Module):
-    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
+    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.0):
         super(GCN, self).__init__()
         self.layer1 = GraphConv(in_features, hidden_features)
         self.layer2 = GraphConv(hidden_features, hidden_features)
         self.layer3 = GraphConv(hidden_features, hidden_features)
         self.layer4 = GraphConv(hidden_features, hidden_features)
-        #self.layer5 = GraphConv(hidden_features, fc_features)
         self.fc = nn.Linear(fc_features, num_classes)
         self.dropout = nn.Dropout(dropout)
 
@@ -45,9 +38,6 @@ class GCN(nn.Module):
         h = self.layer4(g, h + inputs)
         h = F.relu(h)
         h = self.dropout(h)
-        #h = self.layer5(g, h )
-        #h = F.relu(h)
-        #h = self.dropout(h)
         h = self.fc(h)
         return h.squeeze()  # Remove the last dimension
 
@@ -76,10 +66,9 @@ for epoch in range(400):
     tot_loss_v = 0
     i=0
     for graph in data_loader:
-        features = graph.ndata["feat"]
+        features_tensor = graph.ndata["feat"]
         label = graph.ndata["label"]
         inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float, device=device)
-        features_tensor = torch.tensor(features, dtype=torch.float)
         num_rows_to_overwrite = features_tensor.size(0)
         num_columns_in_features = features_tensor.size(1)
         inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
@@ -93,11 +82,8 @@ for epoch in range(400):
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
         i+=1
-    #if epoch > 120:
-    #    scheduler.step()
     print(i, " Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
-    #print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
 
 print("final test start")
-DatasetDGL.test(model, task=task, device=device)
+DatasetDGL.test(model, task=task, device=device, rand=True)
 #torch.save(model.state_dict(), "v3-"+task+".pth")
