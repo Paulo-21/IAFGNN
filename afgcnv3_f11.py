@@ -8,7 +8,6 @@ file = sys.argv[1]
 task = sys.argv[2]
 argId = sys.argv[3]
 device = "cpu"
-#graph, inputs, arg_pos = get_item(af_path=file, arg_id=argId)
 raw_features ,att1, att2, nb_el, arg_pos, acceptance = af_reader_py.special(file, argId)
 if acceptance != 2:
     if acceptance == 1:
@@ -37,13 +36,7 @@ inputs = torch.tensor(features, dtype=torch.float32)
 if graph.number_of_nodes() < nb_el:
     graph.add_nodes(nb_el - graph.number_of_nodes())
 graph = dgl.add_self_loop(graph)
-"""
-num_rows_to_overwrite = features_tensor.size(0)
-num_columns_in_features = features_tensor.size(1)
-inputs = torch.randn(graph.number_of_nodes(), 128 , dtype=torch.float32, requires_grad=False).to(device)
-inputs_to_overwrite = inputs.narrow(0, 0, num_rows_to_overwrite).narrow(1, 0, num_columns_in_features)
-inputs_to_overwrite.copy_(features_tensor)
-"""
+
 
 class GCN(nn.Module):
     def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
@@ -52,7 +45,6 @@ class GCN(nn.Module):
         self.layer2 = GraphConv(hidden_features, hidden_features)
         self.layer3 = GraphConv(hidden_features, hidden_features)
         self.layer4 = GraphConv(hidden_features, hidden_features)
-        #self.layer5 = GraphConv(hidden_features, fc_features)
         self.fc = nn.Linear(fc_features, num_classes)
         self.dropout = nn.Dropout(dropout)
 
@@ -73,7 +65,7 @@ class GCN(nn.Module):
         return h.squeeze()  # Remove the last dimension
 
 model = GCN(11, 11, 11, 1)#.to(device)
-model_path = "v3-"+task+"-11.pth"
+model_path = "model_save/"+"v3-"+task+"-11_d0.5.pth"
 if os.path.exists(model_path):
     model.load_state_dict(torch.load(model_path))
 with torch.no_grad():

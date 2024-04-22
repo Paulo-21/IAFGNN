@@ -262,9 +262,6 @@ class TrainingLinearDataset(DGLDataset):
 
     def __getitem__(self, idx:int):
         r = random.randint(0,len(self.instances[idx])-1)
-        print(self.instances[idx][r]," ", self.labels[idx][r])
-        print(self.instances[idx][r].size()," ", self.labels[idx][r].size())
-        
         return (self.instances[idx][r], torch.tensor([self.labels[idx][r]], device=self.device))
 
 def get_gs(af_path, device="cpu"):

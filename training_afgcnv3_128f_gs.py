@@ -8,7 +8,7 @@ from dgl.nn import GraphConv
 import DatasetDGL
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
-task = "DC-ST"
+task = "DS-ST"
 print(task)
 MAX_ARG = 200000
 v = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
@@ -16,7 +16,7 @@ print(v)
 #= "expandable_segments:True"
 
 class GCN(nn.Module):
-    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.0):
+    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
         super(GCN, self).__init__()
         self.layer1 = GraphConv(in_features, hidden_features)
         self.layer2 = GraphConv(hidden_features, hidden_features)
@@ -28,16 +28,16 @@ class GCN(nn.Module):
     def forward(self, g, inputs):
         h = self.layer1(g, inputs)
         h = F.relu(h)
-        h = self.dropout(h)
+        #h = self.dropout(h)
         h = self.layer2(g, h + inputs)
         h = F.relu(h)
-        h = self.dropout(h)
+        #h = self.dropout(h)
         h = self.layer3(g, h + inputs)
         h = F.relu(h)
-        h = self.dropout(h)
+        #h = self.dropout(h)
         h = self.layer4(g, h + inputs)
         h = F.relu(h)
-        h = self.dropout(h)
+        #h = self.dropout(h)
         h = self.fc(h)
         return h.squeeze()  # Remove the last dimension
 
@@ -45,13 +45,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #device = "cpu"
 print("runtime : ", device)
 model = GCN(128, 128, 128, 1).to(device)
-model_path = "v3-"+task+".pth"
+model_path = "model_save/v3-"+task+"_d0.pth"
 total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("total parameters : ", total_params)
 #if os.path.exists(model_path):
 #   model.load_state_dict(torch.load(model_path))
 loss = nn.BCELoss().cuda()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
 model.train()
 print("Loading Data...")
 #af_dataset = DatasetDGL.TrainingGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/")
@@ -86,4 +86,4 @@ for epoch in range(400):
 
 print("final test start")
 DatasetDGL.test(model, task=task, device=device, rand=True)
-#torch.save(model.state_dict(), "v3-"+task+".pth")
+torch.save(model.state_dict(), model_path)

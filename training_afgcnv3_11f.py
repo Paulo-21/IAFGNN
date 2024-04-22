@@ -10,14 +10,14 @@ import DatasetDGL
 
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
-task = "DC-ST"
+task = "DS-ST"
 print(task)
 MAX_ARG = 200000
 v = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
 print("PYTORCH_CUDA_ALLOC_CONF : ", v)
 
 class GCN(nn.Module):
-    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.2):
+    def __init__(self, in_features, hidden_features, fc_features, num_classes, dropout=0.5):
         super(GCN, self).__init__()
         self.layer1 = GraphConv(in_features, hidden_features)
         self.layer2 = GraphConv(hidden_features, hidden_features)
@@ -30,10 +30,10 @@ class GCN(nn.Module):
     def forward(self, g, inputs):
         h = self.layer1(g, inputs)
         h = F.relu(h)
-        h = self.dropout(h)
+        #h = self.dropout(h)
         h = self.layer2(g, h + inputs)
         h = F.relu(h)
-        h = self.dropout(h)
+        #h = self.dropout(h)
         h = self.layer3(g, h + inputs)
         h = F.relu(h)
         #h = self.dropout(h)
@@ -49,7 +49,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print("runtime : ", device)
 torch.backends.cudnn.benchmark = True
 model = GCN(11, 11, 11, 1).to(device)
-model_path = "model_w_lars_data/"+"v3-"+task+"-11.pth"
+model_path = "model_save/"+"v3-"+task+"-11_d0.pth"
 total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("total parameters : ", total_params)
 #if os.path.exists(model_path):
