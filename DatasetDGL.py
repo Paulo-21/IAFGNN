@@ -1,12 +1,9 @@
 import os
-import random
 import dgl
 import torch
 import af_reader_py
 from dgl.data import DGLDataset
-from torch.utils.data import DataLoader
 from sklearn.preprocessing import StandardScaler
-from torch.utils.data import DataLoader, Dataset
 MAX_ARG = 200000
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
@@ -33,7 +30,8 @@ def get_item(af_path, features_path, device="cpu", max_arg=MAX_ARG):
     if nb_el > max_arg:
         return None, None, 1000000
     graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)#.to(device)
-    raw_features = af_reader_py.compute_features(af_path, 10000, 0.000001 )
+    #raw_features = af_reader_py.compute_features(af_path, 10000, 0.000001 )
+    raw_features = af_reader_py.compute_features_extend(af_path)
     scaler = StandardScaler()
     #print(len(raw_features))
     features = scaler.fit_transform(raw_features)
@@ -90,7 +88,7 @@ class LarsMalmDataset(DGLDataset):
     def __init__(self, task, device="cpu"):
         self.label_dir = "../AFGraphLib/AFs/solutions/"
         self.af_dir = "../AFGraphLib/AFs/"
-        self.features_dir = "../AFGraphLib/AFs/features_cache/"
+        self.features_dir = "../AFGraphLib/AFs/features_cache_14/"
         self.device = device
         self.task = task
         super().__init__(name="Dataset of Lars Malm")
@@ -168,9 +166,9 @@ class ValisationDataset(DGLDataset):
                 if true_name not in list_unique_file:
                     af_path = self.af_dir+"_"+year+"/"+f
                     label_path = self.label_dir+"_"+year+"/"+f
-                    features_path = af_data_root+"all_features/"+year+"/"+f+".pt"
+                    features_path = af_data_root+"all_features_14/"+year+"/"+f+".pt"
                     list_unique_file.append(true_name)
-                    if os.path.exists(af_data_root+"all_features/"+year+"/"+f+".pt"):
+                    if os.path.exists(features_path):
                         graph, features, nb_el = light_get_item(af_path, features_path, device=self.device)
                     else:
                         graph, features, nb_el = get_item(af_path, features_path, device=self.device)
@@ -226,47 +224,3 @@ def test(model, task, device="cpu", rand=False):
     print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
     print("acc mean : ", mean_acc/len(af_dataset), " acc mean y : ", mean_acc_yes/tot_yes_count, " acc mean no : ", mean_acc_no/tot_no_count)
     print(task)
-
-class TrainingLinearDataset(DGLDataset):
-    def __init__(self, task, max_arg=MAX_ARG, device="cpu"):
-        self.task = task
-        self.max_arg = max_arg
-        self.device=device
-        super().__init__(name="Af dataset")
-    def __len__(self):
-        return len(self.instances)
-    def process(self):
-        list_year_dir = ["2017"]
-        self.af_dir = af_data_root+"dataset_af"
-        self.label_dir = result_root+"result_"+self.task
-        self.instances = []
-        self.labels = []
-        list_unique_file = []
-        for year in list_year_dir:
-            iter = os.listdir(self.label_dir +"_"+ year)
-            for f in iter:
-                true_name = f.replace(".apx", "")
-                true_name = true_name.replace(".af", "")
-                true_name = true_name.replace(".tgf", "")
-                true_name = true_name.replace(".old", "")
-
-                if true_name not in list_unique_file:
-                    list_unique_file.append(true_name)
-                    af_path = self.af_dir+"_"+year+"/"+f
-                    label_path = self.label_dir+"_"+year+"/"+f
-                    features_path = af_data_root+"all_features/"+year+"/"+f+".pt"
-                    gs = get_gs(af_path, device=self.device)
-                    label = transfom_to_graph(label_path, len(gs), device=self.device)
-                    self.labels.append(label)
-                    self.instances.append(torch.tensor(gs,requires_grad=True ,device=self.device))
-
-    def __getitem__(self, idx:int):
-        r = random.randint(0,len(self.instances[idx])-1)
-        print(self.instances[idx][r]," ", self.labels[idx][r])
-        print(self.instances[idx][r].size()," ", self.labels[idx][r].size())
-        
-        return (self.instances[idx][r], torch.tensor([self.labels[idx][r]], device=self.device))
-
-def get_gs(af_path, device="cpu"):
-    gs = af_reader_py.compute_only_gs(af_path)
-    return gs

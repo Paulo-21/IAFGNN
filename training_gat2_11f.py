@@ -2,19 +2,15 @@ import os
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F
-#import torch.optim.lr_scheduler as lr_scheduler
-from dgl.data import DGLDataset
-import af_reader_py
 import statistics
 import dgl
-from sklearn.preprocessing import StandardScaler
 from dgl.nn import GATv2Conv
 import time
 import DatasetDGL
 
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
-task = "DS-ST"
+task = "DC-CO"
 print(task)
 MAX_ARG = 200000
 v = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
@@ -56,12 +52,12 @@ class GAT(nn.Module):
                 h = h.flatten(1)
         return h
 device1 = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-device = "cpu"
+device = device1
 print("runtime : ", device)
 print("runtime : ", device1)
 torch.backends.cudnn.benchmark = True
 
-model = GAT(11, 5, 1, heads=[5, 3, 3]).to(device1)
+model = GAT(14, 11, 1, heads=[2, 2, 2]).to(device1)
 model_path = "model_save/v3-"+task+"-11-gatv2.pth"
 #if os.path.exists(model_path):
 #    model.load_state_dict(torch.load(model_path))
@@ -77,7 +73,7 @@ print("Loading Data...")
 tic = time.perf_counter()
 #af_dataset = DatasetDGL.TrainingGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/", task=task, device=device)
 af_dataset = DatasetDGL.LarsMalmDataset(task=task, device=device)
-data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=4, shuffle=True)
+data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=8, shuffle=True)
 print(time.perf_counter()-tic)
 print("Start training")
 #scaler = GradScaler()
@@ -87,22 +83,24 @@ for epoch in range(400):
     tot_loss_v = 0
     i=0
     for graph in data_loader:
-        torch.cuda.empty_cache()
+        #torch.cuda.empty_cache()
         inputs = graph.ndata["feat"].to(device1)
         label = graph.ndata["label"].to(device1)
         graph_cdn = graph.to(device1)
         optimizer.zero_grad()
         out = model(graph_cdn, inputs)
         predicted = (torch.sigmoid(out.squeeze())).float()
-        
-        torch.cuda.empty_cache()
+        #torch.cuda.empty_cache()
         losse = loss(predicted, label)
         losse.backward()
-        torch.cuda.empty_cache()
+        #torch.cuda.empty_cache()
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
         i+=1
         optimizer.step()
+    if epoch == 8:
+        for g in optimizer.param_groups:
+            g['lr'] = 0.001
     print(i, "Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
 torch.save(model.state_dict(), model_path)
 

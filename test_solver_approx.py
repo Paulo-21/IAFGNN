@@ -5,8 +5,8 @@ import csv
 
 dir = "../benchmarks/main/"
 #all_task = ["DC-CO","DC-ID", "DC-SST", "DC-ST","DC-STG", "DS-PR", "DS-SST", "DS-ST", "DS-STG"]
-all_task = [ "DC-ST", "DS-PR", "DS-ST"]
-#all_task = ["DC-ST"]
+all_task = ["DC-CO", "DC-ST", "DS-PR", "DS-ST"]
+#all_task = ["DC-CO"]
 max_time = 39
 all_time = {}
 all_good = {}
@@ -34,13 +34,15 @@ for row in cr:
     path = os.path.join(dir, instance_name)
     print("-----------------------------------------")
     print("FILE : ", instance_name, " TASK : ", task)
+    all_instance[task] += 1
     try:
         tic = time.perf_counter()
         #run = subprocess.run(["python", "-W ignore", "afgcnv3.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python", "-OO", "-W ignore", "afgcnv3_f11.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python", "-OO", "-W ignore", "afgcnv3_f11_gatv2.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
-        #run = subprocess.run(["../taas-harperpp/taas-harper++", "-f", path, "-p", task, "-a", arg_id],stdout=subprocess.PIPE, timeout=max_time)
+        #run = subprocess.run(["../taas-harper/taas-harper", "-f", path, "-p", task, "-a", arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["../taas-fargo/taas-fargo", "-limit", "500", "-f", path, "-p", task, "-a", arg_id, "-fo", "i23"],stdout=subprocess.PIPE, timeout=max_time)
+        #run = subprocess.run(["../fargo-limited_v1.1.2/src/taas-fargo", "-limit", "500", "-f", path, "-p", task, "-a", arg_id, "-fo", "i23"],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python", "-W ignore", "afgcnv3_ln.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python", "-W ignore", "afgcnv3_norm.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["../fast_nn/target/release/fast_nn", "-p", task,"-f", path,"-a", arg_id],stdout=subprocess.PIPE, timeout=max_time)
@@ -48,7 +50,6 @@ for row in cr:
         #run = subprocess.run(["../rapproximate_hcat/target/release/rapproximate", "-p", task,"-f", path,"-a", arg_id, "-n"],stdout=subprocess.PIPE, timeout=max_time)
         toc = time.perf_counter()
         res = run.stdout.decode('utf-8').strip()
-        all_instance[task] += 1
         print(res, " ", arg_id, " ", truth_answer, "  eval : ", row[3])
         if (res.startswith("YES") and truth_answer == True) or (res.startswith("NO") and truth_answer == False):
             all_good[task] +=1
@@ -56,14 +57,18 @@ for row in cr:
         else:
             print("INCORRECT : ", all_good[task]," / ", all_instance[task], " acc : ",  (all_good[task] / all_instance[task])*100, "%")
         t = toc - tic
-        all_time[task] += t
+        
     except subprocess.TimeoutExpired:
         t = "Timeout"
         all_timeout[task] +=1
+        t = 39
     if run.returncode != 0:
         t = "Error"
+        toc = time.perf_counter()
+        t = toc - tic
         all_error[task] +=1
 
+    all_time[task] += t
     print(t, "sec")
 
 print("---------------------------------------------------")
