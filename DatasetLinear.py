@@ -80,14 +80,15 @@ def get_dataset_kan(task, max_arg=MAX_ARG, device="cpu"):
                 label_path = label_dir+"_"+year+"/"+f
                 #gs = af_reader_py.compute_only_gs(af_path)                   
                 #gs = af_reader_py.compute_only_gs_w_gr(af_path)
-                #gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
-                gs = af_reader_py.compute_only_gs_w_gr_sa_ed_eb(af_path)
+                gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
+                #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_eb(af_path)
                 if len(gs) > 1000:
                     continue
                 label = transfom_to_graph(label_path, len(gs), device=device)
                 labels.extend(label)
                 instances.extend(gs)
-    return (torch.tensor(instances, requires_grad=True, device=device), torch.tensor(labels, device=device))
+                
+    return (torch.tensor(instances, device=device), torch.tensor(labels, device=device, dtype=torch.long))
 
 
 def get_dataset_kan_test(task, max_arg=MAX_ARG, device="cpu"):
@@ -114,9 +115,11 @@ def get_dataset_kan_test(task, max_arg=MAX_ARG, device="cpu"):
                 label_path = label_dir+"_"+year+"/"+f
                 #gs = af_reader_py.compute_only_gs(af_path)                   
                 #gs = af_reader_py.compute_only_gs_w_gr(af_path)
-                #gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
+                gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
+                if len(gs) > 1000:
+                    continue
                 #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_eb(af_path)
-                #label = transfom_to_graph(label_path, len(gs), device=device)
-                #labels.extend(label)
-                #instances.extend(gs)
-    return (torch.tensor(instances, requires_grad=True, device=device), torch.tensor(labels, device=device))
+                label = transfom_to_graph(label_path, len(gs), device=device)
+                labels.extend(label)
+                instances.extend(gs)
+    return (torch.tensor(instances, device=device), torch.tensor(labels, device=device, dtype=torch.long))
