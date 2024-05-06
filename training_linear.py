@@ -5,10 +5,11 @@ import torch.nn as nn
 import torch.nn.functional as F
 import statistics
 import DatasetLinear
+import schedulefree
 
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
-task = "DC-CO"
+task = "DC-ST"
 print(task)
 MAX_ARG = 200000
 v = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
@@ -47,7 +48,8 @@ model_dir = "model_save/"
 model_path = model_dir + "linear_"+task+"_"+str(INPUT_FEATURES)+"f.pth"
 print("runtime : ", device)
 model = MultiLinear().to(device)
-
+#torch.set_float32_matmul_precision('high')
+#model = torch.compile(model1, mode="max-autotune")
 total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("total parameters : ", total_params)
 #if os.path.exists(model_path):
@@ -55,7 +57,8 @@ print("total parameters : ", total_params)
     #print("Model as being loaded")
     
 loss = nn.BCELoss().cuda()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+#optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+optimizer = schedulefree.AdamWScheduleFree(model.parameters())
 print("Loading Data...")
 #af_dataset = DatasetDGL.TrainingGraphDataset(af_data_root+"dataset_af/", af_data_root+"result/", task=task, device=device)
 tic = time.perf_counter()
@@ -63,9 +66,11 @@ af_dataset = DatasetLinear.TrainingLinearDataset(task=task, device=device)
 print(time.perf_counter()-tic)
 print("Start training")
 model.train()
+optimizer.train()
 for epoch in range(1000):
     tot_loss = []
     tot_loss_v = 0
+    tic= time.perf_counter()
     for (inputs, label) in af_dataset:
         optimizer.zero_grad()
         out = model(inputs)
@@ -74,12 +79,14 @@ for epoch in range(1000):
         optimizer.step()
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
+    print(time.perf_counter()-tic)
     print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
 
 print("final test start")
 #TEST the Model
 #NORMAL
 model.eval()
+optimizer.eval()
 torch.save(model.state_dict(), model_path)
 #SCRIPT
 example = torch.rand(INPUT_FEATURES, device=device)

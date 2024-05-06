@@ -7,10 +7,10 @@ import numpy as np
 dataset = {}
 train_input, train_label = make_moons(n_samples=1000, shuffle=True, noise=0.1, random_state=None)
 test_input, test_label = make_moons(n_samples=1000, shuffle=True, noise=0.1, random_state=None)
-dataset['train_input'] = torch.from_numpy(train_input)
-dataset['test_input'] = torch.from_numpy(test_input)
-dataset['train_label'] = torch.from_numpy(train_label)
-dataset['test_label'] = torch.from_numpy(test_label)
+dataset['train_input'] = torch.from_numpy(train_input).to(dtype=torch.double)
+dataset['test_input'] = torch.from_numpy(test_input).to(dtype=torch.double)
+dataset['train_label'] = torch.from_numpy(train_label).to(dtype=torch.double)
+dataset['test_label'] = torch.from_numpy(test_label).to(dtype=torch.double)
 
 print(dataset['train_input'])
 print(dataset['train_label'])
