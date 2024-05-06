@@ -1,9 +1,12 @@
+import torch
+#torch.set_default_device("cuda")
 from kan import KAN
 import torch
 import DatasetLinear
 
 task = "DC-CO"
-device = "cpu"
+device = "cuda"
+#torch.set_default_device(device)
 instances , labels = DatasetLinear.get_dataset_kan(task=task, device=device)
 instances_test , labels_test = DatasetLinear.get_dataset_kan_test(task=task, device=device)
 dataset = {}
@@ -13,8 +16,8 @@ dataset['train_input'] = instances
 dataset['test_input'] = instances_test
 dataset['train_label'] = labels
 dataset['test_label'] = labels_test
-print(dataset['train_input'])
-print(dataset['train_label'])
+#print(dataset['train_input'])
+#print(dataset['train_label'])
 print("-------------------------------------")
 
 
@@ -24,10 +27,11 @@ def train_acc():
 def test_acc():
     return torch.mean((torch.argmax(model(dataset['test_input']), dim=1) == dataset['test_label']).float())
 
-model = KAN(width=[8,5,2], grid=3, k=3, device=device)
+model = KAN(width=[8,8,2], grid=3, k=3, device=device)
 
-results = model.train(dataset, opt="LBFGS", steps=10, metrics=(train_acc, test_acc), loss_fn=torch.nn.CrossEntropyLoss());
+results = model.train(dataset, opt="LBFGS", steps=100, metrics=(train_acc, test_acc), loss_fn=torch.nn.CrossEntropyLoss(), device=device);
 
+torch.save(model.state_dict(), "kan_model/kan.pth")
 lib = ['x','x^2','x^3','x^4','exp','log','sqrt','tanh','sin','abs']
 model.auto_symbolic(lib=lib)
 

@@ -82,7 +82,7 @@ def get_dataset_kan(task, max_arg=MAX_ARG, device="cpu"):
                 #gs = af_reader_py.compute_only_gs_w_gr(af_path)
                 gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
                 #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_eb(af_path)
-                if len(gs) > 1000:
+                if len(gs) > 10000:
                     continue
                 label = transfom_to_graph(label_path, len(gs), device=device)
                 labels.extend(label)
