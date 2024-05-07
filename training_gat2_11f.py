@@ -7,7 +7,7 @@ import dgl
 from dgl.nn import GATv2Conv
 import time
 import DatasetDGL
-
+import schedulefree
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
 task = "DC-CO"
@@ -67,7 +67,10 @@ total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("total parameters : ", total_params)
 
 loss = nn.BCELoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+#optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.01)
+#optimizer = schedulefree.AdamWScheduleFree(model.parameters())
+
 model.train()
 print("Loading Data...")
 tic = time.perf_counter()
@@ -78,6 +81,7 @@ print(time.perf_counter()-tic)
 print("Start training")
 #scaler = GradScaler()
 model.train()
+#optimizer.train()
 for epoch in range(400):
     tot_loss = []
     tot_loss_v = 0
@@ -102,6 +106,7 @@ for epoch in range(400):
         for g in optimizer.param_groups:
             g['lr'] = 0.001
     print(i, "Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
+#optimizer.eval()
 torch.save(model.state_dict(), model_path)
 
 print("final test start")

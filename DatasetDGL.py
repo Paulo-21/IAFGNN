@@ -78,7 +78,7 @@ class TrainingGraphDataset(DGLDataset):
                         graph, features, nb_el = get_item(af_path, features_path, device=self.device)
                     if nb_el < self.max_arg :
                         graph.ndata["feat"] = features
-                        graph.ndata["label"] = transfom_to_graph(label_path, nb_el, device=self.device)
+                        graph.ndata["label"] = transfom_to_graph(label_path, nb_el, device=self.device).unsqueeze(1)
                         self.graphs.append(graph)
 
     def __getitem__(self, idx:int):
@@ -132,7 +132,7 @@ class LarsMalmDataset(DGLDataset):
                 if nb_el < MAX_ARG:
                     tot_file += 1
                     graph.ndata["feat"] = features
-                    graph.ndata["label"] = torch.Tensor(label).to(self.device)
+                    graph.ndata["label"] = torch.Tensor(label).unsqueeze(1).to(self.device)
                     self.graphs.append(graph)
         print("TOTAL number of file : ", tot_file)
     def __getitem__(self, idx:int):

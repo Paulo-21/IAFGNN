@@ -9,35 +9,30 @@ import schedulefree
 
 af_data_root = "../af_dataset/"
 result_root = "../af_dataset/all_result/"
-task = "DC-ST"
+task = "DC-CO"
 print(task)
 MAX_ARG = 200000
 v = os.environ.get("PYTORCH_CUDA_ALLOC_CONF")
 print("PYTORCH_CUDA_ALLOC_CONF : ", v)
-INPUT_FEATURES = 9
-HIDDEN_FEATURES = INPUT_FEATURES*INPUT_FEATURES
+INPUT_FEATURES = 9*3
+#HIDDEN_FEATURES = int((INPUT_FEATURES*INPUT_FEATURES)/2)
+HIDDEN_FEATURES = (INPUT_FEATURES*INPUT_FEATURES)
 
 class MultiLinear(nn.Module):
     def __init__(self):
         super(MultiLinear, self).__init__()
         self.layer1 = nn.Linear(INPUT_FEATURES, HIDDEN_FEATURES)
         self.layer2 = nn.Linear(HIDDEN_FEATURES, HIDDEN_FEATURES)
-        self.layer3 = nn.Linear(HIDDEN_FEATURES, INPUT_FEATURES*2)
-        self.layer4 = nn.Linear(INPUT_FEATURES*2, 1)
+        self.layer3 = nn.Linear(HIDDEN_FEATURES, INPUT_FEATURES)
+        self.layer4 = nn.Linear(INPUT_FEATURES, 1)
     def forward(self, inputs):
+        inputs = torch.cat((inputs, inputs, inputs), 1)
         h = self.layer1(inputs)
         h = F.leaky_relu(h)
-        #h = F.gelu(h)
-        #h = F.silu(h)
-        #h= F.mish(h)
         h = self.layer2(h)
         h = F.leaky_relu(h)
-        #h = F.silu(h)
-        #h= F.mish(h)
         h = self.layer3(h)
         h = F.leaky_relu(h)
-        #h = F.silu(h)
-        #h= F.mish(h)
         h = self.layer4(h)
         h = F.sigmoid(h)
         return h  # Remove the last dimension
@@ -52,9 +47,9 @@ model = MultiLinear().to(device)
 #model = torch.compile(model1, mode="max-autotune")
 total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("total parameters : ", total_params)
-#if os.path.exists(model_path):
-    #model.load_state_dict(torch.load(model_path))
-    #print("Model as being loaded")
+if os.path.exists(model_path):
+    model.load_state_dict(torch.load(model_path))
+    print("Model as being loaded")
     
 loss = nn.BCELoss().cuda()
 #optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
@@ -67,10 +62,9 @@ print(time.perf_counter()-tic)
 print("Start training")
 model.train()
 optimizer.train()
-for epoch in range(1000):
+for epoch in range(1500):
     tot_loss = []
     tot_loss_v = 0
-    tic= time.perf_counter()
     for (inputs, label) in af_dataset:
         optimizer.zero_grad()
         out = model(inputs)
@@ -79,7 +73,6 @@ for epoch in range(1000):
         optimizer.step()
         tot_loss.append(losse.item())
         tot_loss_v += losse.item()
-    print(time.perf_counter()-tic)
     print("Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
 
 print("final test start")

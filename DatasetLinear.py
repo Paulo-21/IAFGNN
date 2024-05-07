@@ -49,6 +49,8 @@ class TrainingLinearDataset(Dataset):
                     #gs = af_reader_py.compute_only_gs_w_gr(af_path)
                     #gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
                     gs = af_reader_py.compute_only_gs_w_gr_sa_ed_eb(af_path)
+                    if len(gs) >= MAX_ARG:
+                        continue
                     label = torch.tensor(transfom_to_graph(label_path, len(gs), device=self.device), device=self.device)
                     self.labels.append(label.unsqueeze(1))
                     self.instances.append(torch.tensor(gs,requires_grad=True ,device=self.device))

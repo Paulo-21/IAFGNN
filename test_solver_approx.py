@@ -6,7 +6,7 @@ import csv
 dir = "../benchmarks/main/"
 #all_task = ["DC-CO","DC-ID", "DC-SST", "DC-ST","DC-STG", "DS-PR", "DS-SST", "DS-ST", "DS-STG"]
 all_task = ["DC-CO", "DC-ST", "DS-PR", "DS-ST"]
-all_task = ["DC-CO"]
+#all_task = ["DC-CO"]
 max_time = 39
 all_time = {}
 all_good = {}
