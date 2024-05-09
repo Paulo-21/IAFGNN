@@ -6,7 +6,7 @@ import csv
 dir = "../benchmarks/main/"
 #all_task = ["DC-CO","DC-ID", "DC-SST", "DC-ST","DC-STG", "DS-PR", "DS-SST", "DS-ST", "DS-STG"]
 all_task = ["DC-CO", "DC-ST", "DS-PR", "DS-ST"]
-#all_task = ["DC-CO"]
+all_task = ["DC-CO"]
 max_time = 39
 all_time = {}
 all_good = {}
@@ -46,8 +46,9 @@ for row in cr:
         #run = subprocess.run(["python", "-W ignore", "afgcnv3_ln.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python", "-W ignore", "afgcnv3_norm.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["../fast_nn/target/release/fast_nn", "-p", task,"-f", path,"-a", arg_id],stdout=subprocess.PIPE, timeout=max_time)
-        run = subprocess.run(["../fast_nn_burn/target/release/fast_nn_burn", "-p", task,"-f", path,"-a", arg_id],stdout=subprocess.PIPE, timeout=max_time)
+        #run = subprocess.run(["../fast_nn_burn/target/release/fast_nn_burn", "-p", task,"-f", path,"-a", arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python3.11", "-OO", "-W ignore", "kan_solver.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
+        run = subprocess.run(["python3", "-OO", "-W ignore", "afgatv2_f11_idea.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["../rapproximate_hcat/target/release/rapproximate", "-p", task,"-f", path,"-a", arg_id, "-n"],stdout=subprocess.PIPE, timeout=max_time)
         toc = time.perf_counter()
         res = run.stdout.decode('utf-8').strip()

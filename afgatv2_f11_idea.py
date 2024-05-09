@@ -23,9 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import dgl
 from dgl.nn import GATv2Conv
-graph = dgl.graph((att1,att2), num_nodes=nb_el, device=device)
-graph = dgl.add_self_loop(graph)
-inputs = torch.tensor(raw_features, dtype=torch.float32)
+from sklearn.preprocessing import StandardScaler
 
 class GAT(nn.Module):
     def __init__(self, in_size):
@@ -56,11 +54,23 @@ class GAT(nn.Module):
         h = self.layer4(h)
         h = F.sigmoid(h)
         return h
+    
+graph = dgl.graph((att1,att2), num_nodes=nb_el, device=device)
+graph = dgl.add_self_loop(graph)
+
+model_path = "model_save/"+task+"-14-gatv2_idea.pth"
+save = torch.load(model_path, map_location=device)
+scaler = StandardScaler()
+scaler.mean_ = save["mean"]
+scaler.var_ = save["var"]
+scaler.scale_ = save["scale"]
+features = scaler.transform(raw_features)
+inputs = torch.tensor(features, dtype=torch.float32)
+
 model = GAT(8).to(device)
 model.eval()
-model_path = "model_save/"+task+"-14-gatv2_idea.pth"
-if os.path.exists(model_path):
-    model.load_state_dict(torch.load(model_path, map_location=device))
+model.load_state_dict(save["model"])
+
 with torch.no_grad():
     pred = model(graph, inputs)
     predicted = (pred.squeeze()>0.5).float()

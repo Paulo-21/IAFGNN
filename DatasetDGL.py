@@ -28,17 +28,14 @@ def light_get_item(af_path, features_path, device= "cpu"):
 def get_item(af_path, features_path, device="cpu", max_arg=MAX_ARG):
     att1, att2, nb_el = af_reader_py.reading_file_for_dgl(af_path)
     if nb_el > max_arg:
-        return None, None, 1000000
+        return None, None, max_arg
     graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)#.to(device)
+    graph = dgl.add_self_loop(graph)
     #raw_features = af_reader_py.compute_features(af_path, 10000, 0.000001 )
     raw_features = af_reader_py.compute_features_extend(af_path)
-    scaler = StandardScaler()
-    #print(len(raw_features))
-    features = scaler.fit_transform(raw_features)
-    inputs = torch.tensor(features, dtype=torch.float32, requires_grad=False).to(device)
+    inputs = torch.tensor(raw_features, dtype=torch.float32, requires_grad=False).to(device)
     torch.save(inputs, features_path)
     #print("N : ",nb_el," ", graph.number_of_nodes())
-    graph = dgl.add_self_loop(graph)
     
     return graph, inputs, nb_el
 
@@ -119,10 +116,11 @@ class LarsMalmDataset(DGLDataset):
                     continue
                 features_path = self.features_dir + f + ".pt"
                 list_unique_file.append(true_name)
-                print(f)
                 if os.path.exists(features_path):
+                    print(f)
                     graph, features,  nb_el = light_get_item(af_path, features_path, device=self.device)
                 else:
+                    print("GET : ",f)
                     graph, features, nb_el = get_item(af_path, features_path, device=self.device)
                 label = None
                 if problem_type == "DC":
@@ -204,7 +202,7 @@ def test(model, task, device="cpu", rand=False):
                 inputs = inputs_rand
             label = graph.ndata["label"]
             out = model(graph, inputs)
-            predicted = (torch.sigmoid(out.squeeze())>0.5).float()
+            predicted = (out.squeeze()>0.5).float()
             one_acc_yes = sum(element1 == element2 == 1.0  for element1, element2 in zip(predicted, label)).item()
             one_acc_no = sum(element1 == element2 == 0.0   for element1, element2 in zip(predicted, label)).item()
             acc_yes += one_acc_yes
