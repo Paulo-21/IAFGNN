@@ -21,8 +21,11 @@ def transfom_to_graph(label_path, n, device="cpu"):
 def light_get_item(af_path, features_path, device= "cpu"):
     att1, att2, nb_el = af_reader_py.reading_file_for_dgl(af_path)
     graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)
-    graph = dgl.add_self_loop(graph)
-    inputs = torch.load(features_path, map_location=device)
+    #graph = dgl.add_self_loop(graph)
+    inputs = torch.load(features_path, map_location="cpu").numpy()
+    #scaler = StandardScaler()
+    #inputs = scaler.fit_transform(inputs)
+    inputs = torch.tensor(inputs, dtype=torch.float32, requires_grad=True, device=device)
     return graph, inputs, nb_el
 
 def get_item(af_path, features_path, device="cpu", max_arg=MAX_ARG):
@@ -30,19 +33,19 @@ def get_item(af_path, features_path, device="cpu", max_arg=MAX_ARG):
     if nb_el > max_arg:
         return None, None, max_arg
     graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)#.to(device)
-    graph = dgl.add_self_loop(graph)
+    #graph = dgl.add_self_loop(graph)
     #raw_features = af_reader_py.compute_features(af_path, 10000, 0.000001 )
     raw_features = af_reader_py.compute_features_extend(af_path)
-    inputs = torch.tensor(raw_features, dtype=torch.float32, requires_grad=False).to(device)
-    torch.save(inputs, features_path)
+    torch.save(torch.tensor(raw_features, dtype=torch.float32), features_path)
+    #scaler = StandardScaler()
+    #inputs = scaler.fit_transform(raw_features)
+    inputs = torch.tensor(inputs, dtype=torch.float32, device=device)
     #print("N : ",nb_el," ", graph.number_of_nodes())
     
     return graph, inputs, nb_el
 
 class TrainingGraphDataset(DGLDataset):
-    def __init__(self, af_dir, label_dir, task, max_arg=MAX_ARG, device="cpu"):
-        self.label_dir = label_dir
-        self.af_dir = af_dir
+    def __init__(self, task, max_arg=MAX_ARG, device="cpu"):
         self.task = task
         self.max_arg = max_arg
         self.device=device
@@ -68,10 +71,12 @@ class TrainingGraphDataset(DGLDataset):
                     list_unique_file.append(true_name)
                     af_path = self.af_dir+"_"+year+"/"+f
                     label_path = self.label_dir+"_"+year+"/"+f
-                    features_path = af_data_root+"all_features/"+year+"/"+f+".pt"
-                    if os.path.exists(af_data_root+"all_features/"+year+"/"+f+".pt"):
+                    features_path = af_data_root+"all_features_spe/"+year+"/"+f+".pt"
+                    if os.path.exists(features_path):
+                        print(f)
                         graph, features, nb_el = light_get_item(af_path, features_path, device=self.device)
                     else:
+                        print("GET : ", f)
                         graph, features, nb_el = get_item(af_path, features_path, device=self.device)
                     if nb_el < self.max_arg :
                         graph.ndata["feat"] = features
@@ -143,8 +148,7 @@ class ValisationDataset(DGLDataset):
         self.device = device
         super().__init__(name="Validation Dataset")
         
-    def __len__(self):
-        return len(self.graphs)
+    
     def process(self):
         #list_year_dir = ["2017", "2023"]
         list_year_dir = ["2023"]
@@ -174,7 +178,8 @@ class ValisationDataset(DGLDataset):
                         graph.ndata["feat"] = features
                         graph.ndata["label"] = transfom_to_graph(label_path, nb_el, device=self.device)
                         self.graphs.append(graph)
-
+    def __len__(self):
+        return len(self.graphs)
     def __getitem__(self, idx:int):
         return self.graphs[idx]
 

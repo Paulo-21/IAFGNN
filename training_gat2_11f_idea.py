@@ -8,7 +8,6 @@ from dgl.nn import GATv2Conv
 import time
 import DatasetDGL
 #import DatasetDGL2
-from sklearn.preprocessing import StandardScaler
 import schedulefree
 
 af_data_root = "../af_dataset/"
@@ -22,17 +21,18 @@ print(v)
 class GAT(nn.Module):
     def __init__(self, in_size):
         super().__init__()
+        self.banorm = nn.BatchNorm1d(5)
+        in_size = in_size-3
         self.num_head = 2
-        self.outgat = in_size
-        self.gat_att1 = GATv2Conv( in_size, self.outgat, self.num_head, residual=True, activation=F.elu)
+        self.outgat_att = 1#in_size
+        self.outgat_def = 2#in_size
+        self.dropout = nn.Dropout(0.2)
+        self.gat_att1 = GATv2Conv( in_size, self.outgat_att, self.num_head, residual=True, activation=F.elu, allow_zero_in_degree=True)
 
-        self.gat_def1 = GATv2Conv( in_size, in_size, self.num_head, residual=True, activation=F.elu)
-        self.gat_def2 = GATv2Conv( in_size*self.num_head, self.outgat, self.num_head, residual=True, activation=F.elu)
-        """self.gat_att_def1 = GATv2Conv( in_size, in_size, self.num_head, residual=True, activation=F.elu)
-        self.gat_att_def2 = GATv2Conv( in_size*self.num_head, self.outgat, self.num_head, residual=True, activation=F.elu)
-        self.gat_att_def3 = GATv2Conv( in_size*self.num_head, self.outgat, self.num_head, residual=True, activation=F.elu)
-        """
-        self.input_features = self.outgat*self.num_head  + self.outgat*self.num_head + in_size #+ self.outgat*self.num_head 
+        self.gat_def1 = GATv2Conv( in_size, in_size, self.num_head, residual=True, activation=F.elu, allow_zero_in_degree=True)
+        self.gat_def2 = GATv2Conv( in_size*self.num_head, self.outgat_def, self.num_head, residual=True, activation=F.elu, allow_zero_in_degree=True)
+        #self.input_features = self.outgat*self.num_head  + self.outgat*self.num_head + in_size #+ self.outgat*self.num_head
+        self.input_features = self.outgat_att*self.num_head  + self.outgat_def*self.num_head + in_size+3 #+ self.outgat*self.num_head 
         self.hidden_features = self.input_features**2
         self.layer1 = nn.Linear(self.input_features, self.hidden_features)
         self.layer2 = nn.Linear(self.hidden_features, self.hidden_features)
@@ -40,22 +40,20 @@ class GAT(nn.Module):
         self.layer4 = nn.Linear(self.input_features, 1)
 
     def forward(self, g, inputs):
-        h_att = self.gat_att1(g, inputs).flatten(1)
-
-        h_def = self.gat_def1(g, inputs).flatten(1)
+        gat_inputs = inputs[:,:5]
+        #gat_inputs = self.banorm(inputs[:,:5])
+        h_att = self.gat_att1(g, gat_inputs).flatten(1)
+        h_def = self.gat_def1(g, gat_inputs).flatten(1)
+        del gat_inputs
         h_def = self.gat_def2(g, h_def).flatten(1)
-
-        h_att_def = self.gat_att_def1(g, inputs).flatten(1)
-        h_att_def = self.gat_att_def2(g, h_att_def).flatten(1)
-        h_att_def = self.gat_att_def3(g, h_att_def).flatten(1)
-
-        inputs = torch.cat((h_att, h_def, h_att_def, inputs), 1)
+        inputs = torch.cat((h_att, h_def, inputs), 1)
         h = self.layer1(inputs)
         h = F.leaky_relu(h)
         h = self.layer2(h)
         h = F.leaky_relu(h)
         h = self.layer3(h)
         h = F.leaky_relu(h)
+        h = self.dropout(h)
         h = self.layer4(h)
         h = F.sigmoid(h)
         return h
@@ -64,7 +62,7 @@ device = device1
 print("runtime : ", device)
 print("runtime : ", device1)
 torch.backends.cudnn.benchmark = True
-scaler = StandardScaler()
+#scaler = StandardScaler()
 print("Loading Data...")
 
 model = GAT(8).to(device1)
@@ -88,9 +86,10 @@ loss_fn = nn.BCELoss().to(device)
 #optimizer = torch.optim.LBFGS(model.parameters(), lr=0.1)
 optimizer = schedulefree.AdamWScheduleFree(model.parameters())
 tic = time.perf_counter()
-af_dataset = DatasetDGL.LarsMalmDataset(task=task, device=device)
+#af_dataset = DatasetDGL.LarsMalmDataset(task=task, device=device)
+af_dataset = DatasetDGL.TrainingGraphDataset(task=task, device=device)
 #af_dataset = DatasetDGL2.LarsMalmDataset(task=task, scaler=scaler, device=device)
-data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=3, shuffle=True)
+data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=16, shuffle=True)
 print(time.perf_counter()-tic)
 
 model.train()
@@ -98,10 +97,9 @@ optimizer.train()
 
 print("Start training")
 
-model.train()
-epoch=-1
-#for epoch in range(500):
-while True:
+#epoch=-1
+for epoch in range(2000):
+#while True:
     epoch+=1
     tot_loss = []
     tot_loss_v = 0
@@ -117,14 +115,19 @@ while True:
         tot_loss.append(loss.item())
         tot_loss_v += loss.item()
         i+=1
+    """if epoch > 1100:
+        if tot_loss_v < 0.7:
+            break"""
     print(i, "Epoch : ", epoch," Mean : " , statistics.fmean(tot_loss), " Median : ", statistics.median(tot_loss), "loss : ", tot_loss_v)
     #print("epoch : ", epoch)
-data_save = {"mean" : scaler.mean_, "var": scaler.var_, "scale": scaler.scale_, "model": model.state_dict()}
-torch.save(data_save, model_path)
+#data_save = {"mean" : scaler.mean_, "var": scaler.var_, "scale": scaler.scale_, "model": model.state_dict()}
+#torch.save(data_save, model_path)
+model.eval()
+optimizer.eval()
+torch.save(model.state_dict(), model_path)
 
 print("final test start")
-optimizer.eval()
-DatasetDGL.test(model, task=task, scaler=scaler, device=device1)
+DatasetDGL.test(model, task=task, device=device1)
 #DatasetDGL2.test(model, task=task, scaler=scaler, device=device1)
 
 """def closure():
