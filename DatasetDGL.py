@@ -1,3 +1,4 @@
+import csv
 import os
 import dgl
 import torch
@@ -18,6 +19,10 @@ def transfom_to_graph(label_path, n, device="cpu"):
         target[int(n)] = 1.0
     return torch.tensor(target, requires_grad=False, device=device)
 
+def get_features(af_path):
+    #raw_features = af_reader_py.compute_features(af_path, 10000, 0.000001 )
+    raw_features = af_reader_py.compute_features_extend(af_path)
+    return raw_features
 def light_get_item(af_path, features_path, device= "cpu"):
     att1, att2, nb_el = af_reader_py.reading_file_for_dgl(af_path)
     graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)
@@ -34,8 +39,7 @@ def get_item(af_path, features_path, device="cpu", max_arg=MAX_ARG):
         return None, None, max_arg
     graph = dgl.graph((torch.tensor(att1),torch.tensor(att2)), num_nodes = nb_el, device=device)#.to(device)
     #graph = dgl.add_self_loop(graph)
-    #raw_features = af_reader_py.compute_features(af_path, 10000, 0.000001 )
-    raw_features = af_reader_py.compute_features_extend(af_path)
+    raw_features = get_features(af_path)
     torch.save(torch.tensor(raw_features, dtype=torch.float32), features_path)
     #scaler = StandardScaler()
     #inputs = scaler.fit_transform(raw_features)
@@ -182,6 +186,19 @@ class ValisationDataset(DGLDataset):
         return len(self.graphs)
     def __getitem__(self, idx:int):
         return self.graphs[idx]
+def get_reponse(task):
+    reader = open("../reduce_results2023.csv", 'r')
+    cr = csv.reader(reader, delimiter=';')
+    instances_answer = {}
+    for row in cr:
+        row_task = row[0]
+        instance_name = row[1]
+        arg_id = row[2]
+        truth_answer = eval(row[3])
+        if row_task != task:
+            continue
+        instances_answer[instance_name] = (instance_name, truth_answer, int(arg_id))
+    return instances_answer
 
 def test(model, task, device="cpu", rand=False):
     af_dataset = ValisationDataset(af_data_root+"dataset_af/", af_data_root+"result/", task=task, device=device)
@@ -227,3 +244,19 @@ def test(model, task, device="cpu", rand=False):
     print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
     print("acc mean : ", mean_acc/len(af_dataset), " acc mean y : ", mean_acc_yes/tot_yes_count, " acc mean no : ", mean_acc_no/tot_no_count)
     print(task)
+    dir = "../benchmarks/main/"
+    nb_correct = 0
+    instances_answer = get_reponse(task=task)
+    for names in instances_answer:
+        instances_name, answer, arg_id = instances_answer[names]
+        print(instances_name)
+        filepath = os.path.join(dir, instances_name)
+        feat = get_features(filepath)
+        print("FEAT")
+        inputs = torch.tensor(feat[arg_id-1], device=device)
+        out = (model(inputs) > 0.5)
+        print("FINISH")
+        if out == answer:
+            nb_correct += 1
+        
+    print(task, " score : ", nb_correct)

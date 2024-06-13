@@ -18,6 +18,15 @@ def transfom_to_graph(label_path, n, device="cpu"):
         target[int(n)] = 1.0
     return target
 
+def get_features(af_path):
+    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
+    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_eb(af_path)
+    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_fuzz(af_path)
+    gs = af_reader_py.compute_features_extend_maxgs(af_path)
+    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_perso(af_path)
+    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_perso_mod(af_path)
+    return gs
+
 class TrainingLinearDataset(Dataset):
     def __init__(self, task, max_arg=MAX_ARG, device="cpu"):
         self.task = task
@@ -170,9 +179,17 @@ def test(model, task, device="cpu", rand=False):
         instances_name, answer, arg_id = instances_answer[names]
         print(instances_name)
         filepath = os.path.join(dir, instances_name)
+        arg_pos, acceptance = af_reader_py.special_only(filepath, str(arg_id))
+        if acceptance != 2:
+            if acceptance == 1 and answer == True:
+                nb_correct+=1
+            elif acceptance == 0 and answer == False:
+                nb_correct+=1
+            continue
+
         feat = get_features(filepath)
         print("FEAT")
-        inputs = torch.tensor(feat[arg_id-1], device=device)
+        inputs = torch.tensor(feat[arg_pos], device=device)
         out = (model(inputs) > 0.5)
         print("FINISH")
         if out == answer:
@@ -180,12 +197,6 @@ def test(model, task, device="cpu", rand=False):
         
     print(task, " score : ", nb_correct)
 
-def get_features(af_path):
-    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
-    gs = af_reader_py.compute_only_gs_w_gr_sa_ed_eb(af_path)
-    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_perso(af_path)
-    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_perso_mod(af_path)
-    return gs
 def get_reponse(task):
     reader = open("../reduce_results2023.csv", 'r')
     cr = csv.reader(reader, delimiter=';')
@@ -229,3 +240,21 @@ def get_dataset_kan_test(task, max_arg=MAX_ARG, device="cpu"):
                 labels.extend(label)
                 instances.extend(gs)
     return (torch.tensor(instances, device=device), torch.tensor(labels, device=device, dtype=torch.long))
+
+
+class DatasetEffKan(Dataset):
+    def __init__(self, task, max_arg=MAX_ARG, device="cpu"):
+        self.task = task
+        self.max_arg = max_arg
+        self.device=device
+        inst, labels = get_dataset_kan(task=task, device=device)
+        self.instances = inst
+        self.labels = labels
+        #super().__init__(name="Af dataset")
+    def __len__(self):
+        return len(self.instances)
+    
+    def __getitem__(self, idx:int):
+        #print((self.instances[idx], self.labels[idx]))
+        return (self.instances[idx], self.labels[idx])
+    

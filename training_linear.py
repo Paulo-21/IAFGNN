@@ -24,11 +24,13 @@ class MultiLinear(nn.Module):
         self.layer2 = nn.Linear(HIDDEN_FEATURES, HIDDEN_FEATURES)
         self.layer3 = nn.Linear(HIDDEN_FEATURES, INPUT_FEATURES)
         self.layer4 = nn.Linear(INPUT_FEATURES, 1)
+        #self.dropout = nn.Dropout(0.2)
     def forward(self, inputs):
         h = self.layer1(inputs)
         h = F.leaky_relu(h)
         h = self.layer2(h)
         h = F.leaky_relu(h)
+        #h = self.dropout(h)
         h = self.layer3(h)
         h = F.leaky_relu(h)
         h = self.layer4(h)
@@ -38,7 +40,7 @@ class MultiLinear(nn.Module):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #device = "cpu"
 model_dir = "model_save/"
-model_path = model_dir + "linear_"+task+"_"+str(INPUT_FEATURES)+"f.pth"
+model_path = model_dir + "linear_"+task+"_"+str(INPUT_FEATURES)+"f_d0.2.pth"
 print("runtime : ", device)
 model = MultiLinear().to(device)
 #torch.set_float32_matmul_precision('high')
@@ -60,7 +62,7 @@ print(time.perf_counter()-tic)
 print("Start training")
 model.train()
 optimizer.train()
-for epoch in range(500):
+for epoch in range(700):
     tot_loss = []
     tot_loss_v = 0
     for (inputs, label) in af_dataset:
@@ -78,7 +80,7 @@ print("final test start")
 model.eval()
 optimizer.eval()
 #NORMAL
-#torch.save(model.state_dict(), model_path)
+torch.save(model.state_dict(), model_path)
 #SCRIPT
 
 DatasetLinear.test(model=model, task=task, device=device)
