@@ -40,11 +40,11 @@ class MultiLinear(nn.Module):
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 #device = "cpu"
 model_dir = "model_save/"
-model_path = model_dir + "linear_"+task+"_"+str(INPUT_FEATURES)+"f_d0.2.pth"
+model_path = model_dir + "linear_"+task+"_"+str(INPUT_FEATURES)+"f.pth"
 print("runtime : ", device)
 model = MultiLinear().to(device)
 #torch.set_float32_matmul_precision('high')
-#model = torch.compile(model1, mode="max-autotune")
+model = torch.compile(model)
 total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print("total parameters : ", total_params)
 #if os.path.exists(model_path):
@@ -60,9 +60,11 @@ tic = time.perf_counter()
 af_dataset = DatasetLinear.TrainingLinearDataset(task=task, device=device)
 print(time.perf_counter()-tic)
 print("Start training")
+#model = torch.compile(model)
+
 model.train()
 optimizer.train()
-for epoch in range(700):
+for epoch in range(2500):
     tot_loss = []
     tot_loss_v = 0
     for (inputs, label) in af_dataset:
@@ -80,7 +82,7 @@ print("final test start")
 model.eval()
 optimizer.eval()
 #NORMAL
-torch.save(model.state_dict(), model_path)
+#torch.save(model.state_dict(), model_path)
 #SCRIPT
 
 DatasetLinear.test(model=model, task=task, device=device)

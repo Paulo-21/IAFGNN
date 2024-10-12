@@ -21,8 +21,8 @@ def transfom_to_graph(label_path, n, device="cpu"):
 def get_features(af_path):
     #gs = af_reader_py.compute_only_gs_w_gr_sa_ed(af_path)
     #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_eb(af_path)
-    #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_fuzz(af_path)
-    gs = af_reader_py.compute_features_extend_maxgs(af_path)
+    gs = af_reader_py.compute_only_gs_w_gr_sa_ed_fuzz(af_path)
+    #gs = af_reader_py.compute_features_extend_maxgs(af_path)
     #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_perso(af_path)
     #gs = af_reader_py.compute_only_gs_w_gr_sa_ed_perso_mod(af_path)
     return gs
@@ -138,6 +138,7 @@ class ValisationDataset(Dataset):
 
 def test(model, task, device="cpu", rand=False):
     model.eval()
+    """
     af_dataset = ValisationDataset(af_data_root+"dataset_af/", af_data_root+"result/", task=task, device=device)
     acc_yes = 0
     acc_no = 0
@@ -171,13 +172,13 @@ def test(model, task, device="cpu", rand=False):
     print("acc : ", (acc_yes+acc_no)/(tot_el_no+tot_el_yes) ,"acc yes : ", acc_yes/tot_el_yes, "acc no : ", acc_no/tot_el_no )
     print("acc mean : ", mean_acc/len(af_dataset), " acc mean y : ", mean_acc_yes/tot_yes_count, " acc mean no : ", mean_acc_no/tot_no_count)
     print(task)
-    
+    """
     dir = "../benchmarks/main/"
     nb_correct = 0
     instances_answer = get_reponse(task=task)
     for names in instances_answer:
         instances_name, answer, arg_id = instances_answer[names]
-        print(instances_name)
+        #print(instances_name)
         filepath = os.path.join(dir, instances_name)
         arg_pos, acceptance = af_reader_py.special_only(filepath, str(arg_id))
         if acceptance != 2:
@@ -188,10 +189,10 @@ def test(model, task, device="cpu", rand=False):
             continue
 
         feat = get_features(filepath)
-        print("FEAT")
+        #print("FEAT")
         inputs = torch.tensor(feat[arg_pos], device=device)
         out = (model(inputs) > 0.5)
-        print("FINISH")
+        #print("FINISH")
         if out == answer:
             nb_correct += 1
         

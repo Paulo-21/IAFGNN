@@ -41,7 +41,7 @@ for row in cr:
         #run = subprocess.run(["python", "-OO", "-W ignore", "afgcnv3_f11.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python", "-OO", "-W ignore", "afgcnv3_f11_gatv2.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["../harperpp_v1.1.1/taas-harper++", "-f", path, "-p", task, "-a", arg_id],stdout=subprocess.PIPE, timeout=max_time)
-        #run = subprocess.run(["../taas-fargo/taas-fargo", "-limit", "500", "-f", path, "-p", task, "-a", arg_id, "-fo", "i23"],stdout=subprocess.PIPE, timeout=max_time)
+        #run = subprocess.run(["../taas-fargo2/taas-fargo", "-time-limit", "36", "-f", path, "-p", task, "-a", arg_id, "-fo", "i23"],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["../fargo-limited_v1.1.2/src/taas-fargo", "-limit", "500", "-f", path, "-p", task, "-a", arg_id, "-fo", "i23"],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python", "-W ignore", "afgcnv3_ln.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)
         #run = subprocess.run(["python", "-W ignore", "afgcnv3_norm.py", path, task, arg_id],stdout=subprocess.PIPE, timeout=max_time)

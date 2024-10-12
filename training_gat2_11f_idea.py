@@ -91,7 +91,7 @@ af_dataset = DatasetDGL.TrainingGraphDataset(task=task, device=device)
 #af_dataset = DatasetDGL2.LarsMalmDataset(task=task, scaler=scaler, device=device)
 data_loader = dgl.dataloading.GraphDataLoader(af_dataset, batch_size=16, shuffle=True)
 print(time.perf_counter()-tic)
-
+#model = torch.compile(model)
 model.train()
 optimizer.train()
 
